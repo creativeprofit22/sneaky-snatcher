@@ -3,23 +3,24 @@
   "version": "0.1.0",
   "description": "AI-powered component extraction and transformation CLI - browse, extract, transform, ship",
   "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
   "bin": {
-    "snatch": "./bin/snatch.js"
+    "snatch": "./bin/snatch.ts"
   },
   "scripts": {
-    "build": "tsc",
-    "dev": "tsc --watch",
-    "start": "node dist/index.js",
-    "lint": "eslint src/",
-    "lint:fix": "eslint src/ --fix",
-    "format": "prettier --write \"src/**/*.ts\"",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage",
-    "typecheck": "tsc --noEmit",
-    "prepare": "npm run build"
+    "start": "bun run src/index.ts",
+    "dev": "bun run --watch src/index.ts",
+    "snatch": "bun run bin/snatch.ts",
+    "lint": "bunx eslint src/",
+    "lint:fix": "bunx eslint src/ --fix",
+    "format": "bunx prettier --write \"src/**/*.ts\"",
+    "test": "bun test",
+    "test:watch": "bun test --watch",
+    "test:coverage": "bun test --coverage",
+    "typecheck": "bunx tsc --noEmit",
+    "build": "bun build src/index.ts --outdir dist --target node",
+    "build:bin": "bun build bin/snatch.ts --outfile dist/snatch --target bun --compile"
   },
   "keywords": [
     "cli",
@@ -32,13 +33,11 @@
     "svelte",
     "tailwind",
     "css",
-    "automation"
+    "automation",
+    "bun"
   ],
   "author": "",
   "license": "MIT",
-  "engines": {
-    "node": ">=18.0.0"
-  },
   "dependencies": {
     "chalk": "^5.3.0",
     "commander": "^12.1.0",
@@ -47,17 +46,17 @@
     "subclaude": "^1.0.0"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
+    "@types/bun": "latest",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",
     "eslint": "^9.0.0",
     "prettier": "^3.3.0",
-    "typescript": "^5.6.0",
-    "vitest": "^2.1.0"
+    "typescript": "^5.6.0"
   },
   "files": [
-    "dist",
+    "src",
     "bin",
+    "dist",
     "README.md",
     "LICENSE"
   ]

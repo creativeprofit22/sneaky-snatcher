@@ -4,9 +4,7 @@
  * Writes generated components and styles to disk.
  */
 
-import * as fs from 'fs/promises';
-import * as path from 'path';
-import type { OutputConfig, OutputResult, WrittenFile, TransformResult } from '../types/index.js';
+import type { OutputConfig, OutputResult, WrittenFile, TransformResult } from '../types/index.ts';
 
 const DEFAULT_CONFIG: OutputConfig = {
   baseDir: './components',

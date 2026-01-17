@@ -6,7 +6,7 @@
  * - HTML to component transformation
  */
 
-export { LLMClient } from './client.js';
-export { locateElement } from './locator.js';
-export { transformToComponent } from './transformer.js';
-export { PROMPTS } from './prompts.js';
+export { LLMClient } from './client.ts';
+export { locateElement } from './locator.ts';
+export { transformToComponent, generateComponentName } from './transformer.ts';
+export { PROMPTS } from './prompts.ts';

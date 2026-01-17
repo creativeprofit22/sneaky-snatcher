@@ -2,7 +2,7 @@
  * CLI Options Parser and Validator
  */
 
-import type { SnatchOptions, Framework, Styling } from '../types/index.js';
+import type { SnatchOptions, Framework, Styling } from '../types/index.ts';
 
 const VALID_FRAMEWORKS: Framework[] = ['react', 'vue', 'svelte', 'html'];
 const VALID_STYLING: Styling[] = ['tailwind', 'css-modules', 'vanilla', 'inline'];

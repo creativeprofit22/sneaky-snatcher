@@ -8,6 +8,6 @@
  * - Screenshot capture
  */
 
-export { BrowserManager } from './browser.js';
-export { createAccessibilitySnapshot, resolveRefToSelector } from './snapshot.js';
-export { waitForPageReady, scrollToElement } from './utils.js';
+export { BrowserManager } from './browser.ts';
+export { createAccessibilitySnapshot, resolveRefToSelector, formatTreeForLLM } from './snapshot.ts';
+export { waitForPageReady, scrollToElement } from './utils.ts';

@@ -10,7 +10,7 @@
  * Ported from sneaky-rat's StyleReducer.
  */
 
-import type { StyleReducerOptions } from '../types/index.js';
+import type { StyleReducerOptions } from '../types/index.ts';
 
 // Browser default values to filter out
 const BROWSER_DEFAULTS: Record<string, string[]> = {

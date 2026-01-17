@@ -4,9 +4,7 @@
  * Downloads and organizes extracted assets.
  */
 
-import * as fs from 'fs/promises';
-import * as path from 'path';
-import type { Asset, DownloadedAsset } from '../types/index.js';
+import type { Asset, DownloadedAsset } from '../types/index.ts';
 
 /**
  * Download all assets to output directory

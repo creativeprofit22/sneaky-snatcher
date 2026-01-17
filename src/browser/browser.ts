@@ -5,7 +5,7 @@
  */
 
 import { chromium, Browser, Page, BrowserContext } from 'playwright';
-import type { BrowserConfig, Viewport } from '../types/index.js';
+import type { BrowserConfig, Viewport } from '../types/index.ts';
 
 const DEFAULT_CONFIG: BrowserConfig = {
   headless: true,

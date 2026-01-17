@@ -5,9 +5,7 @@
  */
 
 import type { Page } from 'playwright';
-import * as fs from 'fs/promises';
-import * as path from 'path';
-import type { Asset } from '../types/index.js';
+import type { Asset } from '../types/index.ts';
 
 /**
  * Find all assets referenced by element and its children

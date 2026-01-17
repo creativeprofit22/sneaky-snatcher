@@ -8,6 +8,6 @@
  * - Index/barrel export generation
  */
 
-export { OutputWriter } from './writer.js';
-export { downloadAssets, organizeAssets } from './assets.js';
-export { generateIndex, updateIndex } from './barrel.js';
+export { OutputWriter } from './writer.ts';
+export { downloadAssets, organizeAssets } from './assets.ts';
+export { generateIndex, updateIndex } from './barrel.ts';

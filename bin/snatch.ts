@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 
 /**
  * Sneaky Snatcher CLI
@@ -11,7 +11,7 @@
  *   snatch "vercel.com" --selector ".hero-section" --styling tailwind
  */
 
-import { runCli } from '../dist/cli/index.js';
+import { runCli } from '../src/cli/index.ts';
 
 runCli().catch((error) => {
   console.error('Fatal error:', error);

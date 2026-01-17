@@ -4,10 +4,10 @@
  * Uses Claude to find elements from natural language descriptions.
  */
 
-import type { PageSnapshot, LocateRequest, LocateResult } from '../types/index.js';
-import { LLMClient } from './client.js';
-import { PROMPTS } from './prompts.js';
-import { formatTreeForLLM } from '../browser/snapshot.js';
+import type { PageSnapshot, LocateRequest, LocateResult } from '../types/index.ts';
+import { LLMClient } from './client.ts';
+import { PROMPTS } from './prompts.ts';
+import { formatTreeForLLM } from '../browser/snapshot.ts';
 
 /**
  * Locate element using natural language query

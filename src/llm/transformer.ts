@@ -4,9 +4,9 @@
  * Transforms extracted HTML+CSS into framework components.
  */
 
-import type { TransformRequest, TransformResult, Framework, Styling } from '../types/index.js';
-import { LLMClient } from './client.js';
-import { PROMPTS } from './prompts.js';
+import type { TransformRequest, TransformResult, Framework, Styling } from '../types/index.ts';
+import { LLMClient } from './client.ts';
+import { PROMPTS } from './prompts.ts';
 
 /**
  * Transform HTML+CSS to component

@@ -6,7 +6,7 @@
  */
 
 import type { Page } from 'playwright';
-import type { AccessibilityNode, PageSnapshot } from '../types/index.js';
+import type { AccessibilityNode, PageSnapshot } from '../types/index.ts';
 
 /**
  * Create accessibility snapshot of the page

@@ -4,7 +4,7 @@
  * Wrapper around subclaude for Claude API calls.
  */
 
-import type { LLMConfig, TokenUsage } from '../types/index.js';
+import type { LLMConfig, TokenUsage } from '../types/index.ts';
 
 // Note: subclaude types would be imported here
 // import { askClaude, checkClaude } from 'subclaude';

@@ -13,11 +13,11 @@ import type {
   ExtractedElement,
   TransformResult,
   OutputResult,
-} from './types/index.js';
-import { BrowserManager, createAccessibilitySnapshot, resolveRefToSelector } from './browser/index.js';
-import { extractElement } from './extractor/index.js';
-import { LLMClient, locateElement, transformToComponent } from './llm/index.js';
-import { OutputWriter, downloadAssets } from './output/index.js';
+} from './types/index.ts';
+import { BrowserManager, createAccessibilitySnapshot, resolveRefToSelector } from './browser/index.ts';
+import { extractElement } from './extractor/index.ts';
+import { LLMClient, locateElement, transformToComponent, generateComponentName } from './llm/index.ts';
+import { OutputWriter, downloadAssets } from './output/index.ts';
 import {
   createSpinner,
   logSuccess,
@@ -25,9 +25,8 @@ import {
   logVerbose,
   logSummary,
   setVerbose,
-} from './cli/logger.js';
-import { normalizeUrl } from './cli/options.js';
-import { generateComponentName } from './llm/transformer.js';
+  normalizeUrl,
+} from './cli/index.ts';
 
 /**
  * Run the full extraction pipeline

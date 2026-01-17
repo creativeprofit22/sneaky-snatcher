@@ -4,5 +4,5 @@
  * Common helpers used across modules.
  */
 
-export { sleep, retry, timeout } from './async.js';
-export { sanitize, toPascalCase, toKebabCase } from './string.js';
+export { sleep, retry, timeout } from './async.ts';
+export { sanitize, toPascalCase, toKebabCase } from './string.ts';

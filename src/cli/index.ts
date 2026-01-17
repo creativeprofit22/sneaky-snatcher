@@ -4,6 +4,6 @@
  * Command-line interface for Sneaky Snatcher.
  */
 
-export { createProgram, runCli } from './program.js';
-export { parseOptions, validateOptions } from './options.js';
-export { createSpinner, logSuccess, logError, logInfo, logVerbose } from './logger.js';
+export { createProgram, runCli } from './program.ts';
+export { parseOptions, validateOptions, normalizeUrl } from './options.ts';
+export { createSpinner, logSuccess, logError, logInfo, logVerbose, setVerbose, logSummary } from './logger.ts';

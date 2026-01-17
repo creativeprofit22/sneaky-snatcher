@@ -30,26 +30,26 @@ AI-powered component extraction and transformation CLI. Browse, extract, transfo
 
 ```bash
 # Clone the repository
-git clone https://github.com/YOUR_USERNAME/sneaky-snatcher.git
+git clone https://github.com/creativeprofit22/sneaky-snatcher.git
 cd sneaky-snatcher
 
-# Install dependencies
-npm install
+# Install dependencies (using Bun)
+bun install
 
 # Install Playwright browsers
-npx playwright install chromium
+bunx playwright install chromium
 
-# Build
-npm run build
+# Run directly (no build step needed!)
+bun run snatch
 
-# Link globally (optional)
-npm link
+# Or link globally
+bun link
 ```
 
 ### Prerequisites
 
-- Node.js >= 18.0.0
-- Claude CLI installed and authenticated (`npm install -g @anthropic-ai/claude-code`)
+- [Bun](https://bun.sh) >= 1.0.0
+- Claude CLI installed and authenticated (`bun add -g @anthropic-ai/claude-code`)
 - Claude Pro or Max subscription
 
 ## Usage
@@ -206,7 +206,7 @@ snatch --batch components.json
 ## Programmatic API
 
 ```typescript
-import { orchestrate, BrowserManager, extractElement } from 'sneaky-snatcher';
+import { orchestrate, BrowserManager, extractElement } from './src/index.ts';
 
 // Full pipeline
 const result = await orchestrate({
@@ -250,22 +250,25 @@ Create a `.snatchrc.json` in your project root (optional):
 
 ```bash
 # Install dependencies
-npm install
+bun install
 
-# Run in development mode
-npm run dev
+# Run CLI directly (no build needed)
+bun run snatch "example.com" --find "hero"
+
+# Run in watch mode
+bun run dev
 
 # Run tests
-npm test
+bun test
 
 # Type check
-npm run typecheck
+bun run typecheck
 
 # Lint
-npm run lint
+bun run lint
 
-# Build
-npm run build
+# Build standalone binary (optional)
+bun run build:bin
 ```
 
 ## How It Works

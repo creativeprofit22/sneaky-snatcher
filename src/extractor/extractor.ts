@@ -5,9 +5,9 @@
  */
 
 import type { Page } from 'playwright';
-import type { ExtractedElement, Asset } from '../types/index.js';
-import { StyleReducer } from './styleReducer.js';
-import { resolveAssets } from './assetResolver.js';
+import type { ExtractedElement, Asset } from '../types/index.ts';
+import { StyleReducer } from './styleReducer.ts';
+import { resolveAssets } from './assetResolver.ts';
 
 /**
  * Extract element HTML and styles from page

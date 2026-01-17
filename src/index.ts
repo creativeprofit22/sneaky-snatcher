@@ -8,7 +8,7 @@
  */
 
 // Core orchestrator
-export { orchestrate } from './orchestrator.js';
+export { orchestrate } from './orchestrator.ts';
 
 // Types
 export type {
@@ -20,22 +20,22 @@ export type {
   TransformResult,
   OutputResult,
   PipelineResult,
-} from './types/index.js';
+} from './types/index.ts';
 
 // Browser module
-export { BrowserManager, createAccessibilitySnapshot, resolveRefToSelector } from './browser/index.js';
+export { BrowserManager, createAccessibilitySnapshot, resolveRefToSelector } from './browser/index.ts';
 
 // Extractor module
-export { extractElement, StyleReducer, resolveAssets, downloadAsset } from './extractor/index.js';
+export { extractElement, StyleReducer, resolveAssets, downloadAsset } from './extractor/index.ts';
 
 // LLM module
-export { LLMClient, locateElement, transformToComponent, PROMPTS } from './llm/index.js';
+export { LLMClient, locateElement, transformToComponent, PROMPTS } from './llm/index.ts';
 
 // Output module
-export { OutputWriter, downloadAssets, generateIndex, updateIndex } from './output/index.js';
+export { OutputWriter, downloadAssets, generateIndex, updateIndex } from './output/index.ts';
 
 // CLI (for programmatic use)
-export { createProgram, runCli } from './cli/index.js';
+export { createProgram, runCli } from './cli/index.ts';
 
 // Utils
-export { sleep, retry, timeout, sanitize, toPascalCase, toKebabCase } from './utils/index.js';
+export { sleep, retry, timeout, sanitize, toPascalCase, toKebabCase } from './utils/index.ts';

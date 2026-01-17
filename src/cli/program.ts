@@ -5,11 +5,12 @@
  */
 
 import { Command } from 'commander';
-import { version } from '../../package.json' with { type: 'json' };
-import type { SnatchOptions, Framework, Styling } from '../types/index.js';
-import { validateOptions } from './options.js';
-import { logError, logInfo } from './logger.js';
-import { orchestrate } from '../orchestrator.js';
+import type { SnatchOptions, Framework, Styling } from '../types/index.ts';
+import { validateOptions } from './options.ts';
+import { logError, logInfo } from './logger.ts';
+import { orchestrate } from '../orchestrator.ts';
+
+const version = '0.1.0';
 
 /**
  * Create CLI program
