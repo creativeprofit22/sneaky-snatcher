@@ -103,8 +103,15 @@ export async function orchestrate(options: SnatchOptions): Promise<PipelineResul
       if (!selector) {
         throw new Error(`Could not resolve element reference: ${locateResult.ref}`);
       }
+    } else if (options.interactive) {
+      // Interactive mode - launch visual picker
+      locateSpinner.text = 'Waiting for element selection...';
+      const pickerResult = await browser.launchInteractivePicker();
+      selector = pickerResult.selector;
+      logVerbose(`User selected: <${pickerResult.tagName}> "${pickerResult.textPreview}"`);
+      logVerbose(`Selector: ${selector}`);
     } else {
-      throw new Error('Either --selector or --find is required');
+      throw new Error('Either --selector, --find, or --interactive is required');
     }
 
     timing.locate = Date.now() - locateStart;

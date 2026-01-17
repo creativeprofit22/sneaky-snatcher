@@ -11,3 +11,4 @@
 export { BrowserManager } from './browser.ts';
 export { createAccessibilitySnapshot, resolveRefToSelector, formatTreeForLLM } from './snapshot.ts';
 export { waitForPageReady, scrollToElement } from './utils.ts';
+export { launchPicker, type PickerResult } from './picker.ts';

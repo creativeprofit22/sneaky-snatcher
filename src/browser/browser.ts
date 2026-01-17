@@ -6,6 +6,7 @@
 
 import { chromium, Browser, Page, BrowserContext } from 'playwright';
 import type { BrowserConfig, Viewport } from '../types/index.ts';
+import { launchPicker, type PickerResult } from './picker.ts';
 
 const DEFAULT_CONFIG: BrowserConfig = {
   headless: true,
@@ -102,5 +103,18 @@ export class BrowserManager {
       throw new Error('Browser not launched. Call launch() first.');
     }
     await this.page.setViewportSize(viewport);
+  }
+
+  /**
+   * Launch interactive element picker
+   *
+   * Opens a visual picker overlay in the browser that lets users
+   * select an element by clicking. Returns the CSS selector.
+   */
+  async launchInteractivePicker(): Promise<PickerResult> {
+    if (!this.page) {
+      throw new Error('Browser not launched. Call launch() first.');
+    }
+    return launchPicker(this.page);
   }
 }

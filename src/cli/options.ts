@@ -34,14 +34,19 @@ export function validateOptions(options: SnatchOptions): ValidationResult {
     }
   }
 
-  // Must have either selector or find
-  if (!options.selector && !options.find) {
-    errors.push('Either --selector or --find is required');
+  // Must have selector, find, or interactive mode
+  if (!options.selector && !options.find && !options.interactive) {
+    errors.push('Either --selector, --find, or --interactive is required');
   }
 
   // Cannot have both selector and find
   if (options.selector && options.find) {
     errors.push('Cannot use both --selector and --find');
+  }
+
+  // Interactive mode is mutually exclusive with selector/find
+  if (options.interactive && (options.selector || options.find)) {
+    errors.push('--interactive cannot be used with --selector or --find');
   }
 
   // Framework validation
