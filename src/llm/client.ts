@@ -5,9 +5,8 @@
  */
 
 import type { LLMConfig, TokenUsage } from '../types/index.ts';
-
-// Note: subclaude types would be imported here
-// import { askClaude, checkClaude } from 'subclaude';
+import { askClaude, checkClaude, ClaudeError } from 'subclaude';
+import { LLMError, LLMNotAvailableError, LLMTimeoutError } from '../errors/index.ts';
 
 const DEFAULT_CONFIG: LLMConfig = {
   model: 'sonnet',
@@ -30,36 +29,56 @@ export class LLMClient {
    * Send prompt to Claude and get response
    */
   async ask(prompt: string, systemPrompt?: string): Promise<LLMResponse> {
-    // TODO: Replace with actual subclaude implementation
-    // const response = await askClaude(prompt, {
-    //   systemPrompt: systemPrompt || this.config.systemPrompt,
-    //   model: this.config.model,
-    //   timeout: this.config.timeout,
-    //   fullResponse: true,
-    // });
+    try {
+      const response = await askClaude(prompt, {
+        systemPrompt: systemPrompt || this.config.systemPrompt,
+        model: this.config.model,
+        timeout: this.config.timeout,
+        fullResponse: true,
+      });
 
-    // Placeholder for development
-    console.warn('[LLM] subclaude integration pending - returning mock response');
+      // fullResponse: true returns object with result and usage
+      const fullResponse = response as {
+        result: string;
+        usage?: { input_tokens: number; output_tokens: number };
+        total_cost_usd: number;
+      };
 
-    return {
-      content: `// Mock response for: ${prompt.slice(0, 50)}...`,
-      tokens: {
-        input: 0,
-        output: 0,
-        total: 0,
-      },
-    };
+      return {
+        content: fullResponse.result,
+        tokens: fullResponse.usage
+          ? {
+              input: fullResponse.usage.input_tokens,
+              output: fullResponse.usage.output_tokens,
+              total: fullResponse.usage.input_tokens + fullResponse.usage.output_tokens,
+            }
+          : undefined,
+      };
+    } catch (error) {
+      if (error instanceof ClaudeError) {
+        // Map subclaude errors to our error classes
+        if (error.message.includes('CLI_NOT_FOUND') || error.message.includes('NOT_AUTHENTICATED')) {
+          throw new LLMNotAvailableError(error.message);
+        }
+        if (error.message.includes('TIMEOUT')) {
+          throw new LLMTimeoutError(this.config.timeout, error.message);
+        }
+        throw new LLMError(error.message, error);
+      }
+      throw new LLMError(error instanceof Error ? error.message : String(error));
+    }
   }
 
   /**
    * Check if Claude CLI is available and authenticated
    */
   async checkAvailability(): Promise<boolean> {
-    // TODO: Replace with actual subclaude check
-    // return await checkClaude();
-
-    console.warn('[LLM] subclaude availability check pending');
-    return true;
+    try {
+      const status = await checkClaude();
+      return status.installed && status.authenticated;
+    } catch {
+      return false;
+    }
   }
 
   /**
