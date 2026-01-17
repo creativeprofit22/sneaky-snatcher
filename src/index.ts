@@ -22,6 +22,27 @@ export type {
   PipelineResult,
 } from './types/index.ts';
 
+// Config
+export { loadConfig, getConfig, DEFAULTS, SUPPORTED_FRAMEWORKS, SUPPORTED_STYLING } from './config/index.ts';
+export type { Config } from './config/index.ts';
+
+// Errors
+export {
+  SnatchError,
+  BrowserError,
+  NavigationError,
+  ElementNotFoundError,
+  LLMError,
+  LLMNotAvailableError,
+  ExtractionError,
+  TransformationError,
+  OutputError,
+  ConfigError,
+  ValidationError,
+  isSnatchError,
+  formatError,
+} from './errors/index.ts';
+
 // Browser module
 export { BrowserManager, createAccessibilitySnapshot, resolveRefToSelector } from './browser/index.ts';
 
