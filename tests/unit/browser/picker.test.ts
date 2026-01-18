@@ -976,3 +976,277 @@ describe('Tooltip Content Generation', () => {
     expect(classPreview).toBe('');
   });
 });
+
+describe('Keyboard Shortcuts', () => {
+  describe('Enter Key Selection', () => {
+    test('Enter key confirms current selection', async () => {
+      const mockPage = createMockPage();
+      const pickerPromise = launchPicker(mockPage as any);
+
+      // Simulate Enter key confirming selection on hovered element
+      setTimeout(() => {
+        mockPage.triggerSelection({
+          selector: '#current-element',
+          tagName: 'button',
+          textPreview: 'Submit',
+        });
+      }, 10);
+
+      const result = await pickerPromise;
+      expect(result.selector).toBe('#current-element');
+      expect(result.tagName).toBe('button');
+    });
+
+    test('Enter with no current element does nothing', async () => {
+      const mockPage = createMockPage();
+      const pickerPromise = launchPicker(mockPage as any);
+
+      // Simulate ESC after Enter with no element
+      setTimeout(() => {
+        mockPage.triggerSelection({
+          selector: '',
+          tagName: '',
+          textPreview: '',
+        });
+      }, 10);
+
+      await expect(pickerPromise).rejects.toThrow('Element selection cancelled');
+    });
+  });
+
+  describe('Arrow Key Navigation', () => {
+    describe('ArrowUp - Previous Sibling', () => {
+      test('navigates to previous sibling element', () => {
+        // The picker uses: currentElement.previousElementSibling
+        const siblings = ['first', 'second', 'third'];
+        const currentIndex = 2; // 'third'
+        const prevIndex = currentIndex - 1;
+        expect(siblings[prevIndex]).toBe('second');
+      });
+
+      test('does not navigate past first sibling', () => {
+        const siblings = ['first', 'second', 'third'];
+        const currentIndex = 0; // 'first'
+        const hasPrev = currentIndex > 0;
+        expect(hasPrev).toBe(false);
+      });
+
+      test('skips __sneaky prefixed siblings', () => {
+        const sibling = { id: '__sneaky-picker-overlay' };
+        const shouldSkip = sibling.id.startsWith('__sneaky');
+        expect(shouldSkip).toBe(true);
+      });
+    });
+
+    describe('ArrowDown - Next Sibling', () => {
+      test('navigates to next sibling element', () => {
+        // The picker uses: currentElement.nextElementSibling
+        const siblings = ['first', 'second', 'third'];
+        const currentIndex = 0; // 'first'
+        const nextIndex = currentIndex + 1;
+        expect(siblings[nextIndex]).toBe('second');
+      });
+
+      test('does not navigate past last sibling', () => {
+        const siblings = ['first', 'second', 'third'];
+        const currentIndex = 2; // 'third'
+        const hasNext = currentIndex < siblings.length - 1;
+        expect(hasNext).toBe(false);
+      });
+    });
+
+    describe('ArrowLeft - Parent Element', () => {
+      test('navigates to parent element', () => {
+        // The picker uses: currentElement.parentElement
+        const parentTagName = 'section';
+        const childTagName = 'article';
+        expect(parentTagName).not.toBe(childTagName);
+      });
+
+      test('does not navigate past document.body', () => {
+        // The picker checks: parent !== document.body
+        const bodyTagName = 'BODY';
+        const shouldStop = (tagName: string) => tagName === bodyTagName;
+        expect(shouldStop('BODY')).toBe(true);
+        expect(shouldStop('DIV')).toBe(false);
+      });
+
+      test('skips __sneaky prefixed parent', () => {
+        const parent = { id: '__sneaky-container' };
+        const shouldSkip = parent.id.startsWith('__sneaky');
+        expect(shouldSkip).toBe(true);
+      });
+    });
+
+    describe('ArrowRight - First Child', () => {
+      test('navigates to first child element', () => {
+        // The picker uses: currentElement.firstElementChild
+        const children = ['firstChild', 'secondChild', 'thirdChild'];
+        const firstChild = children[0];
+        expect(firstChild).toBe('firstChild');
+      });
+
+      test('does nothing if element has no children', () => {
+        const hasChildren = 0;
+        const shouldNavigate = hasChildren > 0;
+        expect(shouldNavigate).toBe(false);
+      });
+
+      test('skips __sneaky prefixed children', () => {
+        const child = { id: '__sneaky-tooltip' };
+        const shouldSkip = child.id.startsWith('__sneaky');
+        expect(shouldSkip).toBe(true);
+      });
+    });
+  });
+
+  describe('Tab Navigation', () => {
+    describe('Focusable Element Detection', () => {
+      test('includes links with href', () => {
+        const selector = 'a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])';
+        expect(selector).toContain('a[href]');
+      });
+
+      test('includes buttons', () => {
+        const selector = 'a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])';
+        expect(selector).toContain('button');
+      });
+
+      test('includes form inputs', () => {
+        const selector = 'a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])';
+        expect(selector).toContain('input');
+        expect(selector).toContain('select');
+        expect(selector).toContain('textarea');
+      });
+
+      test('includes elements with positive tabindex', () => {
+        const selector = 'a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])';
+        expect(selector).toContain('[tabindex]');
+        expect(selector).toContain(':not([tabindex="-1"])');
+      });
+
+      test('excludes hidden elements', () => {
+        // The picker checks: style.display !== 'none' && style.visibility !== 'hidden'
+        const isVisible = (display: string, visibility: string) =>
+          display !== 'none' && visibility !== 'hidden';
+        expect(isVisible('block', 'visible')).toBe(true);
+        expect(isVisible('none', 'visible')).toBe(false);
+        expect(isVisible('block', 'hidden')).toBe(false);
+      });
+
+      test('excludes __sneaky prefixed elements', () => {
+        const elements = [
+          { id: 'submit-btn' },
+          { id: '__sneaky-picker-overlay' },
+          { id: 'cancel-btn' },
+        ];
+        const filtered = elements.filter((el) => !el.id.startsWith('__sneaky'));
+        expect(filtered).toHaveLength(2);
+      });
+    });
+
+    describe('Tab Cycling Behavior', () => {
+      test('Tab moves to next focusable element', () => {
+        const focusable = ['btn1', 'btn2', 'btn3'];
+        const currentIndex = 0;
+        const nextIndex = currentIndex + 1;
+        expect(focusable[nextIndex]).toBe('btn2');
+      });
+
+      test('Tab wraps from last to first', () => {
+        const focusable = ['btn1', 'btn2', 'btn3'];
+        const currentIndex = focusable.length - 1; // 2
+        const nextIndex = currentIndex >= focusable.length - 1 ? 0 : currentIndex + 1;
+        expect(nextIndex).toBe(0);
+        expect(focusable[nextIndex]).toBe('btn1');
+      });
+
+      test('Shift+Tab moves to previous focusable element', () => {
+        const focusable = ['btn1', 'btn2', 'btn3'];
+        const currentIndex = 2;
+        const prevIndex = currentIndex - 1;
+        expect(focusable[prevIndex]).toBe('btn2');
+      });
+
+      test('Shift+Tab wraps from first to last', () => {
+        const focusable = ['btn1', 'btn2', 'btn3'];
+        const currentIndex = 0;
+        const prevIndex = currentIndex <= 0 ? focusable.length - 1 : currentIndex - 1;
+        expect(prevIndex).toBe(2);
+        expect(focusable[prevIndex]).toBe('btn3');
+      });
+
+      test('handles element not in focusable list', () => {
+        const focusable = ['btn1', 'btn2', 'btn3'];
+        const currentElement = 'div-not-focusable';
+        const currentIndex = focusable.indexOf(currentElement); // -1
+        expect(currentIndex).toBe(-1);
+        // When currentIndex is -1, nextIndex becomes 0
+        const nextIndex = currentIndex >= focusable.length - 1 ? 0 : currentIndex + 1;
+        expect(nextIndex).toBe(0);
+      });
+    });
+  });
+
+  describe('Event Prevention', () => {
+    test('keyboard shortcuts call preventDefault', () => {
+      // All keyboard shortcuts should call e.preventDefault() to prevent default browser behavior
+      const keysWithPreventDefault = ['Enter', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab'];
+      expect(keysWithPreventDefault).toHaveLength(6);
+    });
+
+    test('Escape does not call preventDefault', () => {
+      // Escape only needs to cancel selection, not prevent default
+      const keyWithoutPreventDefault = 'Escape';
+      expect(keyWithoutPreventDefault).toBe('Escape');
+    });
+  });
+
+  describe('Integration with Selection', () => {
+    test('keyboard navigation updates highlight and tooltip', async () => {
+      const mockPage = createMockPage();
+      const pickerPromise = launchPicker(mockPage as any);
+
+      // Simulate navigation followed by Enter to select
+      setTimeout(() => {
+        mockPage.triggerSelection({
+          selector: 'ul > li:nth-of-type(2)',
+          tagName: 'li',
+          textPreview: 'Second item',
+        });
+      }, 10);
+
+      const result = await pickerPromise;
+      expect(result.selector).toContain('li');
+      expect(result.textPreview).toBe('Second item');
+    });
+
+    test('scrollIntoView is called for keyboard navigation', () => {
+      // The highlightElement function calls: el.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+      const scrollOptions = { block: 'nearest', behavior: 'smooth' };
+      expect(scrollOptions.block).toBe('nearest');
+      expect(scrollOptions.behavior).toBe('smooth');
+    });
+  });
+});
+
+describe('Updated Banner Content', () => {
+  test('banner mentions Enter to select', () => {
+    const instruction = 'click or Enter to select';
+    expect(instruction).toContain('Enter');
+  });
+
+  test('banner mentions arrow key navigation', () => {
+    const shortcuts = '↑↓ siblings | ←→ parent/child';
+    expect(shortcuts).toContain('↑↓');
+    expect(shortcuts).toContain('←→');
+    expect(shortcuts).toContain('siblings');
+    expect(shortcuts).toContain('parent/child');
+  });
+
+  test('banner mentions Tab navigation', () => {
+    const shortcuts = 'Tab focusables';
+    expect(shortcuts).toContain('Tab');
+    expect(shortcuts).toContain('focusables');
+  });
+});

@@ -92,8 +92,8 @@ export async function launchPicker(page: Page): Promise<PickerResult> {
       box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
     `;
     banner.innerHTML = `
-      <strong>🎯 Element Picker Active</strong> — Hover to highlight, click to select.
-      <span style="opacity: 0.8; margin-left: 10px;">Press ESC to cancel</span>
+      <strong>🎯 Element Picker Active</strong> — Hover to highlight, click or Enter to select.
+      <span style="opacity: 0.8; margin-left: 10px;">↑↓ siblings | ←→ parent/child | Tab focusables | ESC cancel</span>
     `;
 
     document.body.appendChild(overlay);
@@ -351,9 +351,89 @@ export async function launchPicker(page: Page): Promise<PickerResult> {
     }
 
     /**
-     * Handle ESC key to cancel
+     * Update highlight to show a new element (used by keyboard navigation)
+     */
+    function highlightElement(el: Element) {
+      currentElement = el;
+      const rect = el.getBoundingClientRect();
+
+      // Position overlay
+      overlay.style.display = 'block';
+      overlay.style.top = `${rect.top}px`;
+      overlay.style.left = `${rect.left}px`;
+      overlay.style.width = `${rect.width}px`;
+      overlay.style.height = `${rect.height}px`;
+
+      // Update tooltip
+      const tagName = el.tagName.toLowerCase();
+      const classPreview =
+        el.classList.length > 0
+          ? `.${Array.from(el.classList).slice(0, 2).join('.')}`
+          : '';
+      const selector = generateSelector(el);
+
+      tooltip.innerHTML = `
+        <div style="color: #60a5fa; font-weight: bold;">&lt;${tagName}${classPreview}&gt;</div>
+        <div style="margin-top: 4px; opacity: 0.8; font-size: 11px; word-break: break-all;">${selector}</div>
+      `;
+      tooltip.style.display = 'block';
+
+      // Position tooltip above or below element
+      const tooltipHeight = 60;
+      if (rect.top > tooltipHeight + 10) {
+        tooltip.style.top = `${rect.top - tooltipHeight - 8}px`;
+      } else {
+        tooltip.style.top = `${rect.bottom + 8}px`;
+      }
+      tooltip.style.left = `${Math.max(10, Math.min(rect.left, window.innerWidth - 420))}px`;
+
+      // Scroll element into view if needed
+      el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+
+    /**
+     * Get all focusable elements in tab order
+     */
+    function getFocusableElements(): Element[] {
+      const selector =
+        'a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])';
+      return Array.from(document.querySelectorAll(selector)).filter((el) => {
+        // Filter out picker UI elements and hidden elements
+        if ((el as HTMLElement).id?.startsWith('__sneaky')) return false;
+        const style = window.getComputedStyle(el);
+        return style.display !== 'none' && style.visibility !== 'hidden';
+      });
+    }
+
+    /**
+     * Select the current element (shared by Enter key and click)
+     */
+    function selectCurrentElement() {
+      if (!currentElement) return;
+      if ((currentElement as HTMLElement).id?.startsWith('__sneaky')) return;
+
+      try {
+        const selector = generateSelector(currentElement);
+        const tagName = currentElement.tagName.toLowerCase();
+        const textContent = currentElement.textContent || '';
+        const textPreview =
+          textContent.trim().slice(0, 50) + (textContent.length > 50 ? '...' : '');
+
+        (window as unknown as { __sneakySnatcherSelect: (r: unknown) => void }).__sneakySnatcherSelect({
+          selector,
+          tagName,
+          textPreview,
+        });
+      } finally {
+        cleanup();
+      }
+    }
+
+    /**
+     * Handle keyboard navigation and selection
      */
     function handleKeyDown(e: KeyboardEvent) {
+      // Escape: Cancel selection
       if (e.key === 'Escape') {
         cleanup();
         (window as unknown as { __sneakySnatcherSelect: (r: unknown) => void }).__sneakySnatcherSelect({
@@ -361,6 +441,78 @@ export async function launchPicker(page: Page): Promise<PickerResult> {
           tagName: '',
           textPreview: '',
         });
+        return;
+      }
+
+      // Enter: Confirm current selection
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        selectCurrentElement();
+        return;
+      }
+
+      // Arrow and Tab navigation require a current element
+      if (!currentElement) return;
+
+      // Arrow Up: Previous sibling
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        const prev = currentElement.previousElementSibling;
+        if (prev && !(prev as HTMLElement).id?.startsWith('__sneaky')) {
+          highlightElement(prev);
+        }
+        return;
+      }
+
+      // Arrow Down: Next sibling
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        const next = currentElement.nextElementSibling;
+        if (next && !(next as HTMLElement).id?.startsWith('__sneaky')) {
+          highlightElement(next);
+        }
+        return;
+      }
+
+      // Arrow Left: Parent element
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        const parent = currentElement.parentElement;
+        if (parent && parent !== document.body && !(parent as HTMLElement).id?.startsWith('__sneaky')) {
+          highlightElement(parent);
+        }
+        return;
+      }
+
+      // Arrow Right: First child element
+      if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        const firstChild = currentElement.firstElementChild;
+        if (firstChild && !(firstChild as HTMLElement).id?.startsWith('__sneaky')) {
+          highlightElement(firstChild);
+        }
+        return;
+      }
+
+      // Tab: Cycle through focusable elements
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        const focusable = getFocusableElements();
+        if (focusable.length === 0) return;
+
+        const currentIndex = focusable.indexOf(currentElement);
+        let nextIndex: number;
+
+        if (e.shiftKey) {
+          // Shift+Tab: Previous focusable element
+          nextIndex = currentIndex <= 0 ? focusable.length - 1 : currentIndex - 1;
+        } else {
+          // Tab: Next focusable element
+          nextIndex = currentIndex >= focusable.length - 1 ? 0 : currentIndex + 1;
+        }
+
+        highlightElement(focusable[nextIndex]!);
+        return;
       }
     }
 
