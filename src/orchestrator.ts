@@ -282,6 +282,7 @@ async function transformToFramework(
 
 /**
  * Stage 5: Write - Output files and download assets
+ * In dry-run mode, simulates the write and logs what would be created
  */
 async function writeOutput(
   ctx: StageContext,
@@ -290,6 +291,49 @@ async function writeOutput(
   extracted: ExtractedElement
 ): Promise<OutputResult> {
   const { options, output } = ctx;
+
+  // Dry-run mode: simulate and log without actually writing
+  if (options.dryRun) {
+    const spinner = createSpinner('Simulating file writes (dry-run)...');
+    spinner.start();
+    const start = Date.now();
+
+    try {
+      const result = output.simulateWrite(componentName, transformed);
+
+      // Log what would be created
+      logInfo('\n[DRY-RUN] Would create the following files:');
+      for (const file of result.files) {
+        logInfo(`  ${file.type.padEnd(10)} ${file.path} (${formatBytes(file.size)})`);
+      }
+
+      // Log CSS reduction stats
+      if (extracted.originalCss && extracted.css) {
+        const originalSize = extracted.originalCss.length;
+        const reducedSize = extracted.css.length;
+        const reduction = ((1 - reducedSize / originalSize) * 100).toFixed(1);
+        logInfo(`\n[DRY-RUN] CSS reduction: ${formatBytes(originalSize)} → ${formatBytes(reducedSize)} (${reduction}% smaller)`);
+      }
+
+      // Log assets that would be downloaded
+      if (options.includeAssets && extracted.assets.length > 0) {
+        logInfo(`\n[DRY-RUN] Would download ${extracted.assets.length} assets:`);
+        for (const asset of extracted.assets) {
+          logInfo(`  ${asset.type.padEnd(10)} ${asset.url}`);
+        }
+      }
+
+      ctx.timing.write = Date.now() - start;
+      spinner.succeed(`[DRY-RUN] Would write ${result.files.length} files`);
+
+      return result;
+    } catch (error) {
+      spinner.fail('Dry-run simulation failed');
+      throw error;
+    }
+  }
+
+  // Normal mode: actually write files
   const spinner = createSpinner('Writing files...');
   spinner.start();
   const start = Date.now();
@@ -337,6 +381,84 @@ async function downloadAssetsWithLogging(
     logWarn(`Asset download failed: ${error instanceof Error ? error.message : String(error)}`);
     return [];
   }
+}
+
+// ============================================================================
+// Watch Mode
+// ============================================================================
+
+/**
+ * Compute a simple hash of the extracted element for change detection
+ */
+function computeElementHash(extracted: ExtractedElement): string {
+  // Use a simple hash of HTML + CSS content
+  const content = extracted.html + extracted.css;
+  let hash = 0;
+  for (let i = 0; i < content.length; i++) {
+    const char = content.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32-bit integer
+  }
+  return hash.toString(16);
+}
+
+/**
+ * Watch mode loop - poll for element changes and notify
+ */
+async function runWatchLoop(
+  ctx: StageContext,
+  page: Page,
+  selector: string,
+  initialHash: string
+): Promise<void> {
+  const interval = ctx.options.watchInterval ?? 5000;
+
+  logInfo(`\n[WATCH] Watching for changes (polling every ${interval}ms)`);
+  logInfo('[WATCH] Press Ctrl+C to stop watching\n');
+
+  let currentHash = initialHash;
+  let pollCount = 0;
+
+  // Set up Ctrl+C handler
+  let stopping = false;
+  const handleInterrupt = () => {
+    if (stopping) return;
+    stopping = true;
+    logInfo('\n[WATCH] Stopping watch mode...');
+  };
+  process.on('SIGINT', handleInterrupt);
+
+  try {
+    while (!stopping) {
+      // Wait for the interval
+      await new Promise(resolve => setTimeout(resolve, interval));
+
+      if (stopping) break;
+
+      pollCount++;
+      logVerbose(`[WATCH] Poll #${pollCount}...`);
+
+      try {
+        // Re-extract the element
+        const extracted = await extractElement(page, selector);
+        const newHash = computeElementHash(extracted);
+
+        if (newHash !== currentHash) {
+          logWarn(`[WATCH] Element changed! Run snatch again to update.`);
+          logInfo(`[WATCH] Hash: ${currentHash} → ${newHash}`);
+          currentHash = newHash;
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        logWarn(`[WATCH] Poll failed: ${message}`);
+        // Continue watching despite errors
+      }
+    }
+  } finally {
+    process.off('SIGINT', handleInterrupt);
+  }
+
+  logInfo('[WATCH] Watch mode ended');
 }
 
 // ============================================================================
@@ -452,6 +574,12 @@ export async function orchestrate(
       path: result.importPath,
     });
 
+    // Watch mode: keep browser open and poll for changes
+    if (options.watch && !ctx.sharedBrowser) {
+      const initialHash = computeElementHash(extracted);
+      await runWatchLoop(ctx, page, selector, initialHash);
+    }
+
     return {
       success: true,
       output: result,
@@ -563,6 +691,7 @@ export async function orchestrateBatch(
         interactive: false, // Batch mode never interactive
         includeAssets: comp.includeAssets ?? defaults?.includeAssets ?? false,
         verbose: options.verbose,
+        generateStories: comp.generateStories ?? defaults?.generateStories ?? false,
       };
 
       try {

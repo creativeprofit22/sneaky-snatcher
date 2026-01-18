@@ -146,6 +146,9 @@ export function parseOptions(raw: Record<string, unknown>): Partial<SnatchOption
     includeAssets: Boolean(raw.assets || raw.includeAssets),
     verbose: Boolean(raw.verbose),
     generateStories: Boolean(raw.stories || raw.generateStories),
+    dryRun: Boolean(raw.dryRun),
+    watch: Boolean(raw.watch),
+    watchInterval: raw.watchInterval ? Number(raw.watchInterval) : undefined,
   };
 }
 
@@ -276,6 +279,7 @@ export function loadBatchConfig(filePath: string): BatchValidationResult {
         styling: c.styling as Styling | undefined,
         outputDir: c.outputDir ? String(c.outputDir) : undefined,
         includeAssets: c.includeAssets !== undefined ? Boolean(c.includeAssets) : undefined,
+        generateStories: c.generateStories !== undefined ? Boolean(c.generateStories) : undefined,
       });
     }
   }
@@ -299,6 +303,7 @@ export function loadBatchConfig(filePath: string): BatchValidationResult {
         styling: d.styling as Styling | undefined,
         outputDir: d.outputDir ? String(d.outputDir) : undefined,
         includeAssets: d.includeAssets !== undefined ? Boolean(d.includeAssets) : undefined,
+        generateStories: d.generateStories !== undefined ? Boolean(d.generateStories) : undefined,
       };
     }
   }

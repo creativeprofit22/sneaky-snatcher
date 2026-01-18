@@ -82,6 +82,10 @@ snatch "dribbble.com/shots/123" --selector ".shot-content" --assets
 | `--name` | `-n` | Component name (PascalCase) | Auto-generated |
 | `--interactive` | `-i` | Run with visible browser | `false` |
 | `--assets` | `-a` | Download assets (images, fonts) | `false` |
+| `--stories` | - | Generate Storybook story files | `false` |
+| `--dry-run` | - | Simulate extraction without writing files | `false` |
+| `--watch` | - | Watch mode - poll for element changes and notify | `false` |
+| `--watch-interval` | - | Watch polling interval in milliseconds | `5000` |
 | `--verbose` | `-v` | Verbose output | `false` |
 
 ### Interactive Mode

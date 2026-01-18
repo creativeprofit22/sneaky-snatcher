@@ -36,6 +36,9 @@ export function createProgram(): Command {
     .option('-i, --interactive', 'Run in interactive mode with visible browser')
     .option('-a, --assets', 'Include assets (images, fonts)')
     .option('--stories', 'Generate Storybook story files')
+    .option('--dry-run', 'Simulate extraction without writing files')
+    .option('--watch', 'Watch mode - poll for element changes and notify')
+    .option('--watch-interval <ms>', 'Watch polling interval in milliseconds', '5000')
     .option('-v, --verbose', 'Verbose output')
     .option('-b, --batch <file>', 'Extract multiple components from a JSON config file')
     .action(async (url, options) => {
@@ -123,7 +126,10 @@ async function runSnatch(url: string, rawOptions: Record<string, unknown>): Prom
     interactive: parsed.interactive || !baseConfig.headless,
     includeAssets: parsed.includeAssets || baseConfig.includeAssets,
     verbose: parsed.verbose || baseConfig.verbose,
-    generateStories: parsed.generateStories,
+    generateStories: parsed.generateStories || baseConfig.generateStories,
+    dryRun: parsed.dryRun,
+    watch: parsed.watch,
+    watchInterval: parsed.watchInterval,
   };
 
   // Validate options

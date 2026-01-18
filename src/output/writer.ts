@@ -288,6 +288,80 @@ export const Default: Story = {};
   }
 
   /**
+   * Simulate writing component files without actually writing to disk
+   * Returns the same OutputResult as write() would produce
+   */
+  simulateWrite(componentName: string, result: TransformResult): OutputResult {
+    // Input validation
+    validateComponentName(componentName);
+    if (!result || typeof result.code !== 'string' || typeof result.filename !== 'string') {
+      throw new Error('Invalid TransformResult: must have code and filename');
+    }
+
+    const files: WrittenFile[] = [];
+    const componentDir = path.join(this.config.baseDir, componentName);
+
+    // Simulate main component file
+    const componentPath = path.join(componentDir, result.filename);
+    files.push({
+      path: componentPath,
+      type: 'component',
+      size: Buffer.byteLength(result.code),
+    });
+
+    // Simulate styles file if separate
+    if (result.styles) {
+      const stylesFilename = result.filename.replace(/\.(tsx?|jsx?|vue|svelte)$/, '.module.css');
+      const stylesPath = path.join(componentDir, stylesFilename);
+      files.push({
+        path: stylesPath,
+        type: 'styles',
+        size: Buffer.byteLength(result.styles),
+      });
+    }
+
+    // Simulate types file if we have props interface
+    if (result.propsInterface) {
+      const typesPath = path.join(componentDir, 'types.ts');
+      files.push({
+        path: typesPath,
+        type: 'types',
+        size: Buffer.byteLength(result.propsInterface),
+      });
+    }
+
+    // Simulate component index
+    const indexContent = this.generateComponentIndex(componentName, result);
+    const indexPath = path.join(componentDir, 'index.ts');
+    files.push({
+      path: indexPath,
+      type: 'index',
+      size: Buffer.byteLength(indexContent),
+    });
+
+    // Simulate Storybook story if enabled
+    if (this.config.generateStories) {
+      const framework = this.detectFramework(result.filename);
+      if (framework !== 'html') {
+        const storyContent = this.generateStory(componentName, result.filename, framework);
+        const storyFilename = this.getStoryFilename(result.filename, framework);
+        const storyPath = path.join(componentDir, storyFilename);
+        files.push({
+          path: storyPath,
+          type: 'story',
+          size: Buffer.byteLength(storyContent),
+        });
+      }
+    }
+
+    return {
+      files,
+      assets: [],
+      importPath: `./${path.relative(process.cwd(), componentDir)}`,
+    };
+  }
+
+  /**
    * Remove a component and its directory
    * @returns Object with success status, removed files, and any error message
    */

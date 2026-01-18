@@ -29,6 +29,12 @@ export interface SnatchOptions {
   verbose?: boolean;
   /** Generate Storybook stories */
   generateStories?: boolean;
+  /** Dry run - simulate extraction without writing files */
+  dryRun?: boolean;
+  /** Watch mode - poll for element changes */
+  watch?: boolean;
+  /** Watch interval in milliseconds */
+  watchInterval?: number;
 }
 
 export type Framework = 'react' | 'vue' | 'svelte' | 'html';
@@ -273,6 +279,8 @@ export interface BatchComponent {
   outputDir?: string;
   /** Include assets for this component */
   includeAssets?: boolean;
+  /** Generate Storybook stories for this component */
+  generateStories?: boolean;
 }
 
 /** Default options applied to all batch components */
@@ -285,6 +293,8 @@ export interface BatchDefaults {
   outputDir?: string;
   /** Default include assets */
   includeAssets?: boolean;
+  /** Default generate Storybook stories */
+  generateStories?: boolean;
 }
 
 /** Batch configuration file structure */
@@ -339,6 +349,8 @@ export interface FileConfig {
   includeAssets?: boolean;
   /** Verbose logging */
   verbose?: boolean;
+  /** Generate Storybook stories */
+  generateStories?: boolean;
   /** LLM configuration */
   llm?: {
     model?: 'sonnet' | 'opus' | 'haiku';
