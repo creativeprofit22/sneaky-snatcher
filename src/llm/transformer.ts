@@ -10,7 +10,7 @@ import { PROMPTS } from './prompts.ts';
 import { buildPrompt } from './utils.ts';
 
 // Regex patterns for parsing LLM response
-const CODE_BLOCK_PATTERN = /```(?:tsx?|jsx?|vue|svelte|html)?\n([\s\S]*?)```/;
+const CODE_BLOCK_PATTERN = /```(?:tsx?|jsx?|typescript|javascript|vue|svelte|html)?\n([\s\S]*?)```/;
 const CSS_BLOCK_PATTERN = /```css\n([\s\S]*?)```/;
 const PROPS_INTERFACE_PATTERN = /interface\s+\w+Props\s*\{[\s\S]*?\}/;
 const VALID_CODE_PATTERN = /(?:function|const|export|class|<\w+|interface|type\s+\w+)/;
