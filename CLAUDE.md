@@ -64,22 +64,24 @@ Fix ALL errors/warnings before continuing.
 
 ## Pipeline State
 Phase: refactor-hunt
-Feature: Storybook Story Generation
-Files-Validated: src/output/writer.ts, src/cli/program.ts, src/cli/options.ts, src/types/index.ts, src/orchestrator.ts
-Validation-Report: reports/validation-storybook-generation.md
+Feature: Batch Mode generateStories Support
+Files-Validated: src/types/index.ts, src/cli/options.ts, src/orchestrator.ts, src/cli/program.ts
+Validation-Report: reports/validation-batch-generateStories.md
 
 ## Last Session (2026-01-18)
-**Feature**: Storybook Story Generation - VALIDATED
+**Feature**: Batch Mode generateStories Support - VALIDATED
 
 ### Implementation
-- `--stories` CLI flag generates Storybook stories alongside components
-- Supports React (.stories.tsx), Vue (.stories.ts), Svelte (.stories.ts)
-- CSF3 format with Meta, StoryObj types
+- BatchComponent and BatchDefaults interfaces now include `generateStories`
+- loadBatchConfig parses generateStories from components and defaults
+- orchestrateBatch passes generateStories to snatchOptions
+- FileConfig supports generateStories for .snatchrc files
+- program.ts merges generateStories with baseConfig
 
 ### Validation Fixes
-1. **Wiring fix**: orchestrator.ts now passes `generateStories` to OutputWriter
-2. **Import path fix**: React stories use original filename, not sanitized
+1. orchestrator.ts:566 - Added generateStories to snatchOptions in orchestrateBatch
+2. types/index.ts:347 - Added generateStories to FileConfig interface
+3. program.ts:126 - Added baseConfig fallback for generateStories
 
 ### Known Limitations
 - `.ts` files skip stories (treated as HTML)
-- Batch mode doesn't support `generateStories` yet

@@ -18,6 +18,7 @@ export interface Config {
   headless: boolean;
   includeAssets: boolean;
   verbose: boolean;
+  generateStories?: boolean;
   llm: {
     model: 'sonnet' | 'opus' | 'haiku';
     timeout: number;

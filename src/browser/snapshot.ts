@@ -125,7 +125,7 @@ export async function resolveRefToSelector(page: Page, ref: string): Promise<str
       }
 
       // Get element children only (skip text nodes, comments, etc.)
-      const children = Array.from(current.children);
+      const children: Element[] = Array.from(current.children);
 
       if (index >= children.length) {
         return null;
