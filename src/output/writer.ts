@@ -16,6 +16,7 @@ const DEFAULT_CONFIG: OutputConfig = {
 };
 
 /** Characters not allowed in component names (filesystem-safe) */
+// eslint-disable-next-line no-control-regex -- Intentionally checking for control chars in filenames
 const INVALID_NAME_CHARS = /[<>:"/\\|?*\x00-\x1f]/;
 
 /**
