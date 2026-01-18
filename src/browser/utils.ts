@@ -13,15 +13,13 @@ const LAZY_CONTENT_WAIT_MS = 500;
 const SCROLL_ANIMATION_WAIT_MS = 300;
 
 /**
- * Wait for page to be fully ready (network idle + DOM stable)
+ * Wait for page to be fully ready (DOM loaded + brief settle time)
  */
 export async function waitForPageReady(page: Page, timeout = 10000): Promise<void> {
-  await Promise.all([
-    page.waitForLoadState('networkidle', { timeout }),
-    page.waitForLoadState('domcontentloaded', { timeout }),
-  ]);
+  // Wait for DOM to be ready - don't use networkidle as modern JS sites never reach it
+  await page.waitForLoadState('domcontentloaded', { timeout });
 
-  // Additional wait for any lazy-loaded content
+  // Additional wait for JS rendering and lazy-loaded content
   await page.waitForTimeout(LAZY_CONTENT_WAIT_MS);
 }
 

@@ -110,7 +110,10 @@ export class BrowserManager {
   async navigate(url: string): Promise<void> {
     this.validateUrl(url);
     const page = this.ensurePage();
-    await page.goto(url, { waitUntil: 'networkidle' });
+    // Use domcontentloaded instead of networkidle - modern JS sites never reach networkidle
+    await page.goto(url, { waitUntil: 'domcontentloaded' });
+    // Brief wait for initial JS rendering
+    await page.waitForTimeout(1000);
   }
 
   /**
