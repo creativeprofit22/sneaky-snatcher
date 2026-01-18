@@ -2,7 +2,8 @@
  * CLI Options Parser and Validator
  */
 
-import type { SnatchOptions, Framework, Styling } from '../types/index.ts';
+import type { SnatchOptions, Framework, Styling, BatchConfig, BatchComponent } from '../types/index.ts';
+import { readFileSync, existsSync } from 'fs';
 
 const VALID_FRAMEWORKS: Framework[] = ['react', 'vue', 'svelte', 'html'];
 const VALID_STYLING: Styling[] = ['tailwind', 'css-modules', 'vanilla', 'inline'];
@@ -171,4 +172,143 @@ export function normalizeUrl(url: string): string {
     return `https://${url}`;
   }
   return url;
+}
+
+// ============================================================================
+// Batch Config Validation
+// ============================================================================
+
+interface BatchValidationResult {
+  valid: boolean;
+  errors: string[];
+  config?: BatchConfig;
+}
+
+/**
+ * Load and validate a batch config file
+ */
+export function loadBatchConfig(filePath: string): BatchValidationResult {
+  const errors: string[] = [];
+
+  // Check file exists
+  if (!existsSync(filePath)) {
+    return { valid: false, errors: [`Batch file not found: ${filePath}`] };
+  }
+
+  // Read and parse JSON
+  let raw: unknown;
+  try {
+    const content = readFileSync(filePath, 'utf-8');
+    raw = JSON.parse(content);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { valid: false, errors: [`Failed to parse batch file: ${message}`] };
+  }
+
+  // Validate structure
+  if (typeof raw !== 'object' || raw === null) {
+    return { valid: false, errors: ['Batch config must be an object'] };
+  }
+
+  const config = raw as Record<string, unknown>;
+
+  // Validate components array
+  if (!Array.isArray(config.components)) {
+    return { valid: false, errors: ['Batch config must have a "components" array'] };
+  }
+
+  if (config.components.length === 0) {
+    return { valid: false, errors: ['Batch config "components" array cannot be empty'] };
+  }
+
+  // Validate each component
+  const components: BatchComponent[] = [];
+  for (let i = 0; i < config.components.length; i++) {
+    const comp = config.components[i];
+    const prefix = `components[${i}]`;
+
+    if (typeof comp !== 'object' || comp === null) {
+      errors.push(`${prefix}: must be an object`);
+      continue;
+    }
+
+    const c = comp as Record<string, unknown>;
+
+    // Required: url and name
+    if (typeof c.url !== 'string' || c.url.trim() === '') {
+      errors.push(`${prefix}: "url" is required`);
+    }
+    if (typeof c.name !== 'string' || c.name.trim() === '') {
+      errors.push(`${prefix}: "name" is required`);
+    }
+
+    // Must have selector or find
+    if (!c.selector && !c.find) {
+      errors.push(`${prefix}: either "selector" or "find" is required`);
+    }
+    if (c.selector && c.find) {
+      errors.push(`${prefix}: cannot have both "selector" and "find"`);
+    }
+
+    // Validate name format
+    if (typeof c.name === 'string' && !/^[A-Z][a-zA-Z0-9]*$/.test(c.name)) {
+      errors.push(`${prefix}: "name" must be PascalCase (e.g., MyComponent)`);
+    }
+
+    // Validate optional framework
+    if (c.framework !== undefined && !VALID_FRAMEWORKS.includes(c.framework as Framework)) {
+      errors.push(`${prefix}: invalid framework "${c.framework}"`);
+    }
+
+    // Validate optional styling
+    if (c.styling !== undefined && !VALID_STYLING.includes(c.styling as Styling)) {
+      errors.push(`${prefix}: invalid styling "${c.styling}"`);
+    }
+
+    if (errors.length === 0) {
+      components.push({
+        url: String(c.url),
+        selector: c.selector ? String(c.selector) : undefined,
+        find: c.find ? String(c.find) : undefined,
+        name: String(c.name),
+        framework: c.framework as Framework | undefined,
+        styling: c.styling as Styling | undefined,
+        outputDir: c.outputDir ? String(c.outputDir) : undefined,
+        includeAssets: c.includeAssets !== undefined ? Boolean(c.includeAssets) : undefined,
+      });
+    }
+  }
+
+  // Validate defaults (optional)
+  let defaults = config.defaults as BatchConfig['defaults'];
+  if (config.defaults !== undefined) {
+    if (typeof config.defaults !== 'object' || config.defaults === null) {
+      errors.push('"defaults" must be an object');
+      defaults = undefined;
+    } else {
+      const d = config.defaults as Record<string, unknown>;
+      if (d.framework !== undefined && !VALID_FRAMEWORKS.includes(d.framework as Framework)) {
+        errors.push(`defaults: invalid framework "${d.framework}"`);
+      }
+      if (d.styling !== undefined && !VALID_STYLING.includes(d.styling as Styling)) {
+        errors.push(`defaults: invalid styling "${d.styling}"`);
+      }
+      defaults = {
+        framework: d.framework as Framework | undefined,
+        styling: d.styling as Styling | undefined,
+        outputDir: d.outputDir ? String(d.outputDir) : undefined,
+        includeAssets: d.includeAssets !== undefined ? Boolean(d.includeAssets) : undefined,
+      };
+    }
+  }
+
+  if (errors.length > 0) {
+    return { valid: false, errors };
+  }
+
+  return {
+    valid: true,
+    errors: [],
+    config: { components, defaults },
+  };
 }

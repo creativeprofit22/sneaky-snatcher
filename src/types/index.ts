@@ -248,3 +248,73 @@ export interface PipelineTiming {
   write: number;
   total: number;
 }
+
+// ============================================================================
+// Batch Extraction
+// ============================================================================
+
+/** Configuration for a single component in a batch */
+export interface BatchComponent {
+  /** Target URL to extract from */
+  url: string;
+  /** CSS selector to target element */
+  selector?: string;
+  /** Natural language description to find element */
+  find?: string;
+  /** Component name (required for batch) */
+  name: string;
+  /** Override framework for this component */
+  framework?: Framework;
+  /** Override styling for this component */
+  styling?: Styling;
+  /** Override output directory for this component */
+  outputDir?: string;
+  /** Include assets for this component */
+  includeAssets?: boolean;
+}
+
+/** Default options applied to all batch components */
+export interface BatchDefaults {
+  /** Default framework */
+  framework?: Framework;
+  /** Default styling */
+  styling?: Styling;
+  /** Default output directory */
+  outputDir?: string;
+  /** Default include assets */
+  includeAssets?: boolean;
+}
+
+/** Batch configuration file structure */
+export interface BatchConfig {
+  /** List of components to extract */
+  components: BatchComponent[];
+  /** Default options for all components */
+  defaults?: BatchDefaults;
+}
+
+/** Result of a single component extraction in a batch */
+export interface BatchComponentResult {
+  /** Component name */
+  name: string;
+  /** Whether extraction succeeded */
+  success: boolean;
+  /** Pipeline result if successful */
+  result?: PipelineResult;
+  /** Error message if failed */
+  error?: string;
+}
+
+/** Result of a batch extraction */
+export interface BatchResult {
+  /** Total components processed */
+  total: number;
+  /** Number of successful extractions */
+  succeeded: number;
+  /** Number of failed extractions */
+  failed: number;
+  /** Individual component results */
+  results: BatchComponentResult[];
+  /** Total time in ms */
+  totalTime: number;
+}

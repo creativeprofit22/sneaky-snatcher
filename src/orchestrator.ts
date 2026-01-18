@@ -13,6 +13,9 @@ import type {
   ExtractedElement,
   TransformResult,
   OutputResult,
+  BatchConfig,
+  BatchResult,
+  BatchComponentResult,
 } from './types/index.ts';
 import { BrowserManager, createAccessibilitySnapshot, resolveRefToSelector } from './browser/index.ts';
 import { extractElement } from './extractor/index.ts';
@@ -21,6 +24,7 @@ import { OutputWriter, downloadAssets } from './output/index.ts';
 import {
   createSpinner,
   logError,
+  logInfo,
   logVerbose,
   logWarn,
   logSummary,
@@ -424,4 +428,90 @@ export async function orchestrate(options: SnatchOptions): Promise<PipelineResul
       logWarn(`Browser cleanup failed: ${closeError instanceof Error ? closeError.message : String(closeError)}`);
     }
   }
+}
+
+// ============================================================================
+// Batch Orchestration
+// ============================================================================
+
+interface BatchOptions {
+  verbose?: boolean;
+}
+
+/**
+ * Run batch extraction for multiple components
+ * Processes components sequentially (to avoid browser resource conflicts)
+ * Continues on error - collects all results
+ */
+export async function orchestrateBatch(
+  config: BatchConfig,
+  options: BatchOptions = {}
+): Promise<BatchResult> {
+  const totalStart = Date.now();
+  const results: BatchComponentResult[] = [];
+  const { defaults } = config;
+
+  setVerbose(options.verbose ?? false);
+
+  logVerbose(`Starting batch extraction of ${config.components.length} components`);
+
+  for (const [i, comp] of config.components.entries()) {
+    const progress = `[${i + 1}/${config.components.length}]`;
+
+    logInfo(`${progress} Extracting: ${comp.name}`);
+
+    // Merge component options with defaults
+    const snatchOptions: SnatchOptions = {
+      url: comp.url,
+      selector: comp.selector,
+      find: comp.find,
+      framework: comp.framework ?? defaults?.framework ?? 'react',
+      styling: comp.styling ?? defaults?.styling ?? 'tailwind',
+      outputDir: comp.outputDir ?? defaults?.outputDir ?? './components',
+      componentName: comp.name,
+      interactive: false, // Batch mode never interactive
+      includeAssets: comp.includeAssets ?? defaults?.includeAssets ?? false,
+      verbose: options.verbose,
+    };
+
+    try {
+      const result = await orchestrate(snatchOptions);
+
+      if (result.success) {
+        results.push({
+          name: comp.name,
+          success: true,
+          result,
+        });
+      } else {
+        results.push({
+          name: comp.name,
+          success: false,
+          result,
+          error: result.error?.message ?? 'Unknown error',
+        });
+      }
+    } catch (error) {
+      // Catch any uncaught errors from orchestrate
+      const message = error instanceof Error ? error.message : String(error);
+      logError(`${comp.name} failed: ${message}`);
+
+      results.push({
+        name: comp.name,
+        success: false,
+        error: message,
+      });
+    }
+  }
+
+  const succeeded = results.filter((r) => r.success).length;
+  const failed = results.filter((r) => !r.success).length;
+
+  return {
+    total: config.components.length,
+    succeeded,
+    failed,
+    results,
+    totalTime: Date.now() - totalStart,
+  };
 }

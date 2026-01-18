@@ -6,9 +6,9 @@
 
 import { Command } from 'commander';
 import type { SnatchOptions } from '../types/index.ts';
-import { validateOptions, parseOptions } from './options.ts';
-import { logError, logInfo, logWarn } from './logger.ts';
-import { orchestrate } from '../orchestrator.ts';
+import { validateOptions, parseOptions, loadBatchConfig } from './options.ts';
+import { logError, logInfo, logWarn, logSuccess } from './logger.ts';
+import { orchestrate, orchestrateBatch } from '../orchestrator.ts';
 
 const version = '0.1.0';
 
@@ -65,6 +65,24 @@ export function createProgram(): Command {
       logWarn('The clean command is not implemented yet');
     });
 
+  // Batch command - extract multiple components
+  program
+    .command('batch <file>')
+    .description('Extract multiple components from a JSON config file')
+    .option('-v, --verbose', 'Verbose output')
+    .action(async (file, options) => {
+      try {
+        await runBatch(file, options);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        logError(message);
+        if (options.verbose && error instanceof Error && error.stack) {
+          console.error('\n' + error.stack);
+        }
+        process.exit(1);
+      }
+    });
+
   return program;
 }
 
@@ -95,6 +113,40 @@ async function runSnatch(url: string, rawOptions: Record<string, unknown>): Prom
 
   // Run orchestrator
   await orchestrate(options);
+}
+
+/**
+ * Run batch extraction
+ */
+async function runBatch(file: string, rawOptions: Record<string, unknown>): Promise<void> {
+  const verbose = Boolean(rawOptions.verbose);
+
+  // Load and validate batch config
+  const validation = loadBatchConfig(file);
+  if (!validation.valid || !validation.config) {
+    throw new Error(validation.errors.join('\n'));
+  }
+
+  logInfo(`Loaded batch config with ${validation.config.components.length} components`);
+
+  // Run batch extraction
+  const result = await orchestrateBatch(validation.config, { verbose });
+
+  // Print summary
+  if (result.failed === 0) {
+    logSuccess(`Batch complete: ${result.succeeded}/${result.total} components extracted`);
+  } else {
+    logWarn(`Batch complete: ${result.succeeded}/${result.total} succeeded, ${result.failed} failed`);
+
+    // List failed components
+    for (const r of result.results) {
+      if (!r.success) {
+        logError(`  ${r.name}: ${r.error}`);
+      }
+    }
+
+    process.exit(1);
+  }
 }
 
 /**
