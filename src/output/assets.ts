@@ -50,6 +50,22 @@ const VALID_DATA_URL_MIME_PREFIXES = [
   'application/octet-stream',
 ] as const;
 
+/** Default asset size limits in bytes */
+export const DEFAULT_ASSET_SIZE_LIMITS: Record<Asset['type'], number> = {
+  image: 10 * 1024 * 1024,      // 10 MB
+  icon: 1 * 1024 * 1024,        // 1 MB
+  font: 5 * 1024 * 1024,        // 5 MB
+  background: 10 * 1024 * 1024, // 10 MB
+};
+
+/** Options for asset downloading */
+export interface AssetDownloadOptions {
+  /** Maximum size in bytes per asset type. Set to 0 to disable limit for that type. */
+  sizeLimits?: Partial<Record<Asset['type'], number>>;
+  /** Skip assets that exceed size limits instead of throwing (default: true) */
+  skipOversized?: boolean;
+}
+
 /**
  * Validate data URL has proper mime type prefix
  */
@@ -102,12 +118,27 @@ export function extractFilenameFromUrl(url: string, assetType?: Asset['type']): 
 }
 
 /**
+ * Get the size limit for an asset type
+ */
+function getSizeLimit(
+  assetType: Asset['type'],
+  customLimits?: Partial<Record<Asset['type'], number>>
+): number {
+  if (customLimits && assetType in customLimits) {
+    return customLimits[assetType]!;
+  }
+  return DEFAULT_ASSET_SIZE_LIMITS[assetType];
+}
+
+/**
  * Download all assets to output directory
  */
 export async function downloadAssets(
   assets: Asset[],
-  outputDir: string
+  outputDir: string,
+  options: AssetDownloadOptions = {}
 ): Promise<DownloadedAsset[]> {
+  const { sizeLimits, skipOversized = true } = options;
   const downloaded: DownloadedAsset[] = [];
   const assetDir = path.join(outputDir, 'assets');
 
@@ -116,14 +147,48 @@ export async function downloadAssets(
 
   for (const asset of assets) {
     try {
-      const result = await downloadSingleAsset(asset, assetDir);
+      const limit = getSizeLimit(asset.type, sizeLimits);
+      const result = await downloadSingleAsset(asset, assetDir, limit);
       downloaded.push(result);
     } catch (error) {
+      if (error instanceof AssetSizeExceededError) {
+        if (skipOversized) {
+          console.warn(`Skipping oversized asset: ${error.message}`);
+          continue;
+        }
+        throw error;
+      }
       console.warn(`Failed to download asset: ${asset.url}`, error);
     }
   }
 
   return downloaded;
+}
+
+/**
+ * Error thrown when an asset exceeds its size limit
+ */
+export class AssetSizeExceededError extends Error {
+  constructor(
+    public readonly url: string,
+    public readonly size: number,
+    public readonly limit: number,
+    public readonly assetType: Asset['type']
+  ) {
+    super(
+      `Asset exceeds size limit: ${url} is ${formatBytes(size)} but limit for ${assetType} is ${formatBytes(limit)}`
+    );
+    this.name = 'AssetSizeExceededError';
+  }
+}
+
+/**
+ * Format bytes to human readable string
+ */
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 /**
@@ -155,8 +220,13 @@ async function atomicWriteFile(targetPath: string, data: Buffer): Promise<string
 
 /**
  * Download single asset
+ * @param sizeLimit Maximum allowed size in bytes (0 = no limit)
  */
-async function downloadSingleAsset(asset: Asset, outputDir: string): Promise<DownloadedAsset> {
+async function downloadSingleAsset(
+  asset: Asset,
+  outputDir: string,
+  sizeLimit: number = 0
+): Promise<DownloadedAsset> {
   const filename = asset.filename || extractFilenameFromUrl(asset.url, asset.type);
   const targetPath = path.join(outputDir, filename);
 
@@ -172,6 +242,17 @@ async function downloadSingleAsset(asset: Asset, outputDir: string): Promise<Dow
       throw new Error(`Invalid data URL for ${filename}: missing base64 data`);
     }
     const buffer = Buffer.from(base64Data, 'base64');
+
+    // Check size limit for data URLs
+    if (sizeLimit > 0 && buffer.length > sizeLimit) {
+      throw new AssetSizeExceededError(
+        asset.url.substring(0, 50) + '...',
+        buffer.length,
+        sizeLimit,
+        asset.type
+      );
+    }
+
     let localPath: string;
     try {
       localPath = await atomicWriteFile(targetPath, buffer);
@@ -196,7 +277,22 @@ async function downloadSingleAsset(asset: Asset, outputDir: string): Promise<Dow
     throw new Error(`HTTP ${response.status} ${response.statusText} for URL: ${asset.url}`);
   }
 
+  // Check Content-Length header before downloading full body (when available)
+  const contentLength = response.headers.get('content-length');
+  if (sizeLimit > 0 && contentLength) {
+    const size = parseInt(contentLength, 10);
+    if (!isNaN(size) && size > sizeLimit) {
+      throw new AssetSizeExceededError(asset.url, size, sizeLimit, asset.type);
+    }
+  }
+
   const buffer = Buffer.from(await response.arrayBuffer());
+
+  // Check actual size (Content-Length may be missing or inaccurate)
+  if (sizeLimit > 0 && buffer.length > sizeLimit) {
+    throw new AssetSizeExceededError(asset.url, buffer.length, sizeLimit, asset.type);
+  }
+
   let localPath: string;
   try {
     localPath = await atomicWriteFile(targetPath, buffer);

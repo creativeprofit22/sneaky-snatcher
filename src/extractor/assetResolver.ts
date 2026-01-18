@@ -52,13 +52,23 @@ export async function resolveAssets(page: Page, selector: string): Promise<Asset
     }
 
     // Collect background images from computed styles
+    // Handles multiple backgrounds (comma-separated) and various URL formats
     function collectBackgrounds(el: Element): void {
       const computed = window.getComputedStyle(el);
       const bgImage = computed.backgroundImage;
       if (bgImage && bgImage !== 'none') {
-        const urlMatch = bgImage.match(/url\(["']?([^"')]+)["']?\)/);
-        if (urlMatch?.[1] && !urlMatch[1].startsWith('data:')) {
-          found.push({ type: 'background', url: resolveUrl(urlMatch[1]) });
+        // Match all url() patterns, handling:
+        // - Single and double quotes: url("..."), url('...'), url(...)
+        // - Escaped quotes within URLs
+        // - Multiple backgrounds: url(...), url(...)
+        const urlRegex = /url\(\s*(?:["']([^"']+)["']|([^)]+))\s*\)/gi;
+        let match;
+        while ((match = urlRegex.exec(bgImage)) !== null) {
+          // Use quoted value (group 1) or unquoted value (group 2)
+          const url = (match[1] || match[2] || '').trim();
+          if (url && !url.startsWith('data:')) {
+            found.push({ type: 'background', url: resolveUrl(url) });
+          }
         }
       }
     }

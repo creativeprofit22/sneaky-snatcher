@@ -54,9 +54,27 @@ export class BrowserManager {
   }
 
   /**
+   * Validate URL format
+   */
+  private validateUrl(url: string): void {
+    try {
+      const parsed = new URL(url);
+      if (!['http:', 'https:'].includes(parsed.protocol)) {
+        throw new Error(`Unsupported protocol: ${parsed.protocol}. Only http: and https: are supported.`);
+      }
+    } catch (error) {
+      if (error instanceof TypeError) {
+        throw new Error(`Invalid URL format: ${url}`);
+      }
+      throw error;
+    }
+  }
+
+  /**
    * Navigate to URL and wait for load
    */
   async navigate(url: string): Promise<void> {
+    this.validateUrl(url);
     const page = this.ensurePage();
     await page.goto(url, { waitUntil: 'networkidle' });
   }

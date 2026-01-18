@@ -36,6 +36,7 @@ import {
   isSnatchError,
   formatError,
 } from './errors/index.ts';
+import { formatBytes } from './utils/format.ts';
 import type { Page } from 'playwright';
 import type { Ora } from 'ora';
 
@@ -195,8 +196,8 @@ async function extractFromElement(
   try {
     const extracted = await extractElement(page, selector);
 
-    const originalSize = extracted.html.length + (extracted.css?.length || 0);
-    logVerbose(`Extracted ${extracted.html.length} bytes HTML, ${extracted.css?.length || 0} bytes CSS`);
+    const originalSize = extracted.html.length + extracted.css.length;
+    logVerbose(`Extracted ${extracted.html.length} bytes HTML, ${extracted.css.length} bytes CSS`);
     logVerbose(`Found ${extracted.assets.length} assets`);
 
     ctx.timing.extract = Date.now() - start;
@@ -423,13 +424,4 @@ export async function orchestrate(options: SnatchOptions): Promise<PipelineResul
       logWarn(`Browser cleanup failed: ${closeError instanceof Error ? closeError.message : String(closeError)}`);
     }
   }
-}
-
-/**
- * Format bytes for display
- */
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes}B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
 }

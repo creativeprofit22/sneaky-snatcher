@@ -16,8 +16,13 @@ export function setVerbose(enabled: boolean): void {
   verboseMode = enabled;
 }
 
+// ============================================================
+// Spinner Utility (separate from logging API - returns Ora instance)
+// ============================================================
+
 /**
- * Create spinner
+ * Create spinner for long-running operations.
+ * Note: This returns an Ora instance for control, unlike log* functions which return void.
  */
 export function createSpinner(text: string): Ora {
   return ora({
@@ -26,6 +31,10 @@ export function createSpinner(text: string): Ora {
     spinner: 'dots',
   });
 }
+
+// ============================================================
+// Logging API (all functions return void for consistency)
+// ============================================================
 
 /**
  * Log a formatted message with icon

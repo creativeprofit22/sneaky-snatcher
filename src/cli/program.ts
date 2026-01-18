@@ -7,7 +7,7 @@
 import { Command } from 'commander';
 import type { SnatchOptions } from '../types/index.ts';
 import { validateOptions, parseOptions } from './options.ts';
-import { logError, logInfo } from './logger.ts';
+import { logError, logInfo, logWarn } from './logger.ts';
 import { orchestrate } from '../orchestrator.ts';
 
 const version = '0.1.0';
@@ -36,7 +36,11 @@ export function createProgram(): Command {
       try {
         await runSnatch(url, options);
       } catch (error) {
-        logError(error instanceof Error ? error.message : String(error));
+        const message = error instanceof Error ? error.message : String(error);
+        logError(message);
+        if (options.verbose && error instanceof Error && error.stack) {
+          console.error('\n' + error.stack);
+        }
         process.exit(1);
       }
     });
@@ -48,7 +52,7 @@ export function createProgram(): Command {
     .option('-d, --dir <dir>', 'Components directory', './components')
     .action(async (options) => {
       logInfo('Listing components in: ' + options.dir);
-      // TODO: Implement listing
+      logWarn('The list command is not implemented yet');
     });
 
   // Clean command - remove component
@@ -58,7 +62,7 @@ export function createProgram(): Command {
     .option('-d, --dir <dir>', 'Components directory', './components')
     .action(async (name, options) => {
       logInfo(`Removing component: ${name} from ${options.dir}`);
-      // TODO: Implement cleanup
+      logWarn('The clean command is not implemented yet');
     });
 
   return program;

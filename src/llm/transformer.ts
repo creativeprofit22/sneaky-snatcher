@@ -127,14 +127,6 @@ function generateFilename(componentName: string, framework: Framework): string {
   }
 }
 
-/**
- * Validate component name
- */
-export function validateComponentName(name: string): boolean {
-  // PascalCase validation
-  return /^[A-Z][a-zA-Z0-9]*$/.test(name);
-}
-
 // Reserved JavaScript/TypeScript keywords that cannot be used as component names
 const RESERVED_KEYWORDS = new Set([
   'break', 'case', 'catch', 'class', 'const', 'continue', 'debugger', 'default',

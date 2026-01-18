@@ -19,15 +19,40 @@ function validateUrl(url: string | undefined): string | null {
   if (!url) {
     return 'URL is required';
   }
+
+  if (url.trim() === '') {
+    return 'URL cannot be empty';
+  }
+
+  // Check for common typos and malformed URLs
+  if (url.includes(' ')) {
+    return `Invalid URL: "${url}" contains spaces. URLs cannot contain spaces.`;
+  }
+
   try {
-    new URL(url);
+    const parsed = new URL(url);
+    // Only allow http and https protocols
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      return `Invalid URL protocol: "${parsed.protocol}". Only http:// and https:// are supported.`;
+    }
     return null;
   } catch {
+    // Try adding https:// prefix
     try {
-      new URL(`https://${url}`);
+      const parsed = new URL(`https://${url}`);
+      if (!parsed.hostname.includes('.')) {
+        return `Invalid URL: "${url}" is missing a domain extension (e.g., .com, .org)`;
+      }
       return null;
     } catch {
-      return `Invalid URL: ${url}`;
+      // Provide specific error for common issues
+      if (!url.includes('.')) {
+        return `Invalid URL: "${url}" is missing a domain extension (e.g., .com, .org)`;
+      }
+      if (url.startsWith('.') || url.endsWith('.')) {
+        return `Invalid URL: "${url}" has misplaced dots`;
+      }
+      return `Invalid URL: "${url}" is not a valid web address`;
     }
   }
 }

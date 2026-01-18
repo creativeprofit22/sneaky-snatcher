@@ -4,7 +4,39 @@
  * System and user prompts for Claude interactions.
  */
 
-export const PROMPTS = {
+/** Framework-specific code generation guidelines */
+export interface FrameworkGuides {
+  readonly react: string;
+  readonly vue: string;
+  readonly svelte: string;
+  readonly html: string;
+}
+
+/** Styling-specific code generation guidelines */
+export interface StylingGuides {
+  readonly tailwind: string;
+  readonly 'css-modules': string;
+  readonly vanilla: string;
+  readonly inline: string;
+}
+
+/** Complete prompt template collection */
+export interface PromptTemplates {
+  /** System prompt for element location tasks */
+  readonly LOCATE_SYSTEM: string;
+  /** User prompt template for element location */
+  readonly LOCATE_ELEMENT: string;
+  /** System prompt for component transformation */
+  readonly TRANSFORM_SYSTEM: string;
+  /** User prompt template for component transformation */
+  readonly TRANSFORM_COMPONENT: string;
+  /** Framework-specific guidelines */
+  readonly FRAMEWORK_GUIDES: FrameworkGuides;
+  /** Styling-specific guidelines */
+  readonly STYLING_GUIDES: StylingGuides;
+}
+
+export const PROMPTS: PromptTemplates = {
   // ============================================================================
   // Element Location
   // ============================================================================

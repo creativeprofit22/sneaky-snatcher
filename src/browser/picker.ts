@@ -365,11 +365,20 @@ export async function launchPicker(page: Page): Promise<PickerResult> {
     }
 
     /**
+     * Track cleanup state to prevent double-cleanup
+     */
+    let isCleanedUp = false;
+
+    /**
      * Remove picker UI and event listeners
      */
     function cleanup() {
+      if (isCleanedUp) return;
+      isCleanedUp = true;
+
       if (mouseMoveTimeout) {
         clearTimeout(mouseMoveTimeout);
+        mouseMoveTimeout = null;
       }
       overlay.remove();
       tooltip.remove();
@@ -377,12 +386,21 @@ export async function launchPicker(page: Page): Promise<PickerResult> {
       document.removeEventListener('mousemove', handleMouseMove, true);
       document.removeEventListener('click', handleClick, true);
       document.removeEventListener('keydown', handleKeyDown, true);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    }
+
+    /**
+     * Handle page unload - cleanup and cancel selection
+     */
+    function handleBeforeUnload() {
+      cleanup();
     }
 
     // Attach event listeners
     document.addEventListener('mousemove', handleMouseMove, true);
     document.addEventListener('click', handleClick, true);
     document.addEventListener('keydown', handleKeyDown, true);
+    window.addEventListener('beforeunload', handleBeforeUnload);
   });
 
   // Wait for user selection

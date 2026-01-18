@@ -10,6 +10,9 @@ import { PROMPTS } from './prompts.ts';
 import { formatTreeForLLM } from '../browser/snapshot.ts';
 import { buildPrompt, truncateForPreview } from './utils.ts';
 
+/** Default confidence score when LLM response doesn't include one */
+const DEFAULT_CONFIDENCE = 0.8;
+
 /**
  * Locate element using natural language query
  */
@@ -39,10 +42,10 @@ export async function locateElement(
 
   // Extract confidence if provided
   const confidenceMatch = response.content.match(/confidence[:\s]+(\d+(?:\.\d+)?)/i);
-  const confidence = confidenceMatch ? parseFloat(confidenceMatch[1]!) : 0.8;
+  const confidence = confidenceMatch ? parseFloat(confidenceMatch[1]!) : DEFAULT_CONFIDENCE;
 
   if (!confidenceMatch) {
-    console.warn(`[locator] No confidence score in LLM response for query "${request.query}", using default: 0.8`);
+    console.warn(`[locator] No confidence score in LLM response for query "${request.query}", using default: ${DEFAULT_CONFIDENCE}`);
   }
 
   return {

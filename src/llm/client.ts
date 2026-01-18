@@ -53,13 +53,17 @@ export class LLMClient {
 
   /**
    * Send prompt to Claude and get response
+   * @param prompt - The user prompt to send
+   * @param systemPrompt - Optional system prompt override
+   * @param timeout - Optional per-request timeout override (ms)
    */
-  async ask(prompt: string, systemPrompt?: string): Promise<LLMResponse> {
+  async ask(prompt: string, systemPrompt?: string, timeout?: number): Promise<LLMResponse> {
+    const effectiveTimeout = timeout ?? this.config.timeout;
     try {
       const response = await askClaude(prompt, {
         systemPrompt: systemPrompt || this.config.systemPrompt,
         model: this.config.model,
-        timeout: this.config.timeout,
+        timeout: effectiveTimeout,
         fullResponse: true,
       });
 
@@ -92,7 +96,7 @@ export class LLMClient {
           throw new LLMNotAvailableError(message);
         }
         if (matchesErrorPattern(message, ERROR_PATTERNS.timeout)) {
-          throw new LLMTimeoutError(this.config.timeout, message);
+          throw new LLMTimeoutError(effectiveTimeout, message);
         }
         throw new LLMError(message, error);
       }
