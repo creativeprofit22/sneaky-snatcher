@@ -61,3 +61,28 @@ Fix ALL errors/warnings before continuing.
 3. **Extract** → HTML + minimal CSS + assets
 4. **Transform** → Framework component via Claude
 5. **Write** → Output files + download assets
+
+## Pipeline State
+Phase: refactor-hunt
+Feature: Browser Context Reuse
+Files-Validated: src/browser/browser.ts, src/orchestrator.ts, tests/unit/batch.test.ts
+Validation-Report: reports/validation-browser-context-reuse.md
+
+## Last Session (2026-01-17)
+**Feature**: Browser Context Reuse - Validated & Bugs Fixed
+
+### Changes Made
+- Added `isLaunched()`, `newPage()` to BrowserManager for context reuse
+- Modified `orchestrateBatch()` to launch browser once and share across components
+- Added `sharedBrowser` option to `orchestrate()` internal options
+
+### Bugs Fixed During Validation
+1. [HIGH] newPage() now clears page ref before creating new (prevents stale refs)
+2. [HIGH] orchestrateBatch returns proper BatchResult on launch failure
+3. [MEDIUM] newPage() catches page.close() errors (page may already be closed)
+4. [MEDIUM] isLaunched() now checks browser.isConnected()
+5. [LOW] Empty batch returns early without launching browser
+
+### Test Status
+- 517 tests pass
+- New tests added for isLaunched(), newPage(), context reuse

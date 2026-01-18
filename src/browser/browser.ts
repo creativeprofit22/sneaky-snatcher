@@ -25,6 +25,15 @@ export class BrowserManager {
   }
 
   /**
+   * Check if browser is launched, connected, and ready
+   */
+  isLaunched(): boolean {
+    return this.browser !== null &&
+           this.context !== null &&
+           this.browser.isConnected();
+  }
+
+  /**
    * Ensure page exists or throw
    */
   private ensurePage(): Page {
@@ -46,6 +55,31 @@ export class BrowserManager {
       viewport: this.config.viewport,
       userAgent: this.config.userAgent,
     });
+
+    this.page = await this.context.newPage();
+    this.page.setDefaultTimeout(this.config.timeout);
+
+    return this.page;
+  }
+
+  /**
+   * Create a new page, reusing existing browser context
+   * Closes previous page if one exists
+   */
+  async newPage(): Promise<Page> {
+    if (!this.context) {
+      throw new Error('Browser not launched. Call launch() first.');
+    }
+
+    // Close previous page if exists (ignore errors - page may already be closed)
+    if (this.page) {
+      try {
+        await this.page.close();
+      } catch {
+        // Page may already be closed or browser disconnected - continue anyway
+      }
+      this.page = null; // Clear reference before creating new page
+    }
 
     this.page = await this.context.newPage();
     this.page.setDefaultTimeout(this.config.timeout);

@@ -54,6 +54,8 @@ interface StageContext {
   llm: LLMClient;
   output: OutputWriter;
   timing: PipelineTiming;
+  /** If true, browser is shared and should not be closed by this orchestration */
+  sharedBrowser?: boolean;
 }
 
 interface BrowseResult {
@@ -66,12 +68,19 @@ interface LocateStageResult {
   snapshot?: PageSnapshot;
 }
 
+/** Internal options for orchestrate with browser sharing support */
+interface OrchestrateInternalOptions {
+  /** Shared browser manager - if provided, will be reused and not closed */
+  sharedBrowser?: BrowserManager;
+}
+
 // ============================================================================
 // Stage Functions
 // ============================================================================
 
 /**
  * Stage 1: Browse - Launch browser and navigate to URL
+ * If browser is already launched (shared context), creates new page instead
  */
 async function browseAndNavigate(ctx: StageContext): Promise<BrowseResult> {
   const spinner = createSpinner('Launching browser...');
@@ -80,14 +89,22 @@ async function browseAndNavigate(ctx: StageContext): Promise<BrowseResult> {
 
   try {
     const url = normalizeUrl(ctx.options.url);
-    await ctx.browser.launch();
+
+    // Reuse browser if already launched, otherwise launch new
+    if (ctx.browser.isLaunched()) {
+      spinner.text = 'Creating new page...';
+      await ctx.browser.newPage();
+    } else {
+      await ctx.browser.launch();
+    }
+
     await ctx.browser.navigate(url);
     logVerbose(`Navigated to: ${url}`);
 
     ctx.timing.browse = Date.now() - start;
     spinner.succeed(`Navigated to ${new URL(url).hostname}`);
 
-    // getPage() is guaranteed non-null after successful launch() and navigate()
+    // getPage() is guaranteed non-null after successful launch/newPage and navigate
     const page = ctx.browser.getPage();
     return { url, page };
   } catch (error) {
@@ -350,8 +367,13 @@ function wrapLLMError(error: unknown): Error {
 
 /**
  * Run the full extraction pipeline
+ * @param options - Snatch options for extraction
+ * @param internalOpts - Internal options for browser sharing (used by orchestrateBatch)
  */
-export async function orchestrate(options: SnatchOptions): Promise<PipelineResult> {
+export async function orchestrate(
+  options: SnatchOptions,
+  internalOpts: OrchestrateInternalOptions = {}
+): Promise<PipelineResult> {
   const timing: PipelineTiming = {
     browse: 0,
     locate: 0,
@@ -366,13 +388,18 @@ export async function orchestrate(options: SnatchOptions): Promise<PipelineResul
   // Set verbose mode
   setVerbose(options.verbose ?? false);
 
+  // Use shared browser if provided, otherwise create new
+  const isShared = !!internalOpts.sharedBrowser;
+  const browser = internalOpts.sharedBrowser ?? new BrowserManager({ headless: !options.interactive });
+
   // Initialize context
   const ctx: StageContext = {
     options,
-    browser: new BrowserManager({ headless: !options.interactive }),
+    browser,
     llm: new LLMClient(),
     output: new OutputWriter({ baseDir: options.outputDir }),
     timing,
+    sharedBrowser: isShared,
   };
 
   try {
@@ -420,12 +447,14 @@ export async function orchestrate(options: SnatchOptions): Promise<PipelineResul
       timing,
     };
   } finally {
-    // Ensure browser cleanup happens even if close() throws
-    try {
-      await ctx.browser.close();
-    } catch (closeError) {
-      // Log but don't rethrow - primary error (if any) takes precedence
-      logWarn(`Browser cleanup failed: ${closeError instanceof Error ? closeError.message : String(closeError)}`);
+    // Only close browser if we own it (not shared)
+    if (!ctx.sharedBrowser) {
+      try {
+        await ctx.browser.close();
+      } catch (closeError) {
+        // Log but don't rethrow - primary error (if any) takes precedence
+        logWarn(`Browser cleanup failed: ${closeError instanceof Error ? closeError.message : String(closeError)}`);
+      }
     }
   }
 }
@@ -440,7 +469,7 @@ interface BatchOptions {
 
 /**
  * Run batch extraction for multiple components
- * Processes components sequentially (to avoid browser resource conflicts)
+ * Reuses a single browser instance across all components for efficiency
  * Continues on error - collects all results
  */
 export async function orchestrateBatch(
@@ -453,54 +482,101 @@ export async function orchestrateBatch(
 
   setVerbose(options.verbose ?? false);
 
+  // Handle empty batch early - don't launch browser for nothing
+  if (config.components.length === 0) {
+    logWarn('No components to extract');
+    return {
+      total: 0,
+      succeeded: 0,
+      failed: 0,
+      results: [],
+      totalTime: Date.now() - totalStart,
+    };
+  }
+
   logVerbose(`Starting batch extraction of ${config.components.length} components`);
 
-  for (const [i, comp] of config.components.entries()) {
-    const progress = `[${i + 1}/${config.components.length}]`;
+  // Create shared browser for all components
+  const sharedBrowser = new BrowserManager({ headless: true });
 
-    logInfo(`${progress} Extracting: ${comp.name}`);
+  // Launch browser - handle failure gracefully
+  try {
+    await sharedBrowser.launch();
+    logVerbose('Launched shared browser for batch processing');
+  } catch (launchError) {
+    const message = launchError instanceof Error ? launchError.message : String(launchError);
+    logError(`Failed to launch browser: ${message}`);
 
-    // Merge component options with defaults
-    const snatchOptions: SnatchOptions = {
-      url: comp.url,
-      selector: comp.selector,
-      find: comp.find,
-      framework: comp.framework ?? defaults?.framework ?? 'react',
-      styling: comp.styling ?? defaults?.styling ?? 'tailwind',
-      outputDir: comp.outputDir ?? defaults?.outputDir ?? './components',
-      componentName: comp.name,
-      interactive: false, // Batch mode never interactive
-      includeAssets: comp.includeAssets ?? defaults?.includeAssets ?? false,
-      verbose: options.verbose,
+    // Return failed result for all components
+    return {
+      total: config.components.length,
+      succeeded: 0,
+      failed: config.components.length,
+      results: config.components.map(comp => ({
+        name: comp.name,
+        success: false,
+        error: `Browser launch failed: ${message}`,
+      })),
+      totalTime: Date.now() - totalStart,
     };
+  }
 
-    try {
-      const result = await orchestrate(snatchOptions);
+  try {
+    for (const [i, comp] of config.components.entries()) {
+      const progress = `[${i + 1}/${config.components.length}]`;
 
-      if (result.success) {
-        results.push({
-          name: comp.name,
-          success: true,
-          result,
-        });
-      } else {
+      logInfo(`${progress} Extracting: ${comp.name}`);
+
+      // Merge component options with defaults
+      const snatchOptions: SnatchOptions = {
+        url: comp.url,
+        selector: comp.selector,
+        find: comp.find,
+        framework: comp.framework ?? defaults?.framework ?? 'react',
+        styling: comp.styling ?? defaults?.styling ?? 'tailwind',
+        outputDir: comp.outputDir ?? defaults?.outputDir ?? './components',
+        componentName: comp.name,
+        interactive: false, // Batch mode never interactive
+        includeAssets: comp.includeAssets ?? defaults?.includeAssets ?? false,
+        verbose: options.verbose,
+      };
+
+      try {
+        const result = await orchestrate(snatchOptions, { sharedBrowser });
+
+        if (result.success) {
+          results.push({
+            name: comp.name,
+            success: true,
+            result,
+          });
+        } else {
+          results.push({
+            name: comp.name,
+            success: false,
+            result,
+            error: result.error?.message ?? 'Unknown error',
+          });
+        }
+      } catch (error) {
+        // Catch any uncaught errors from orchestrate
+        const message = error instanceof Error ? error.message : String(error);
+        logError(`${comp.name} failed: ${message}`);
+
         results.push({
           name: comp.name,
           success: false,
-          result,
-          error: result.error?.message ?? 'Unknown error',
+          error: message,
         });
       }
-    } catch (error) {
-      // Catch any uncaught errors from orchestrate
-      const message = error instanceof Error ? error.message : String(error);
-      logError(`${comp.name} failed: ${message}`);
-
-      results.push({
-        name: comp.name,
-        success: false,
-        error: message,
-      });
+    }
+  } finally {
+    // Always close shared browser when done
+    try {
+      await sharedBrowser.close();
+      logVerbose('Closed shared browser');
+    } catch (closeError) {
+      logWarn(`Shared browser cleanup failed: ${closeError instanceof Error ? closeError.message : String(closeError)}`);
     }
   }
 
