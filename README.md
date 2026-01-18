@@ -197,11 +197,31 @@ Output:
     └── index.ts
 ```
 
-### Batch Extraction (Coming Soon)
+### Batch Extraction
+
+Extract multiple components in one run from a JSON config file:
 
 ```bash
 snatch --batch components.json
 ```
+
+Example `components.json`:
+
+```json
+{
+  "components": [
+    { "url": "stripe.com", "find": "pricing card", "name": "PricingCard" },
+    { "url": "linear.app", "selector": "nav", "name": "Navigation", "framework": "vue" }
+  ],
+  "defaults": {
+    "framework": "react",
+    "styling": "tailwind",
+    "outputDir": "./components"
+  }
+}
+```
+
+Each component can override `framework`, `styling`, `outputDir`, and `includeAssets`. The batch processor runs sequentially, continuing on errors and reporting success/failure per component.
 
 ## Programmatic API
 

@@ -23,7 +23,7 @@ export function createProgram(): Command {
     .name('snatch')
     .description('AI-powered component extraction and transformation CLI')
     .version(version)
-    .argument('<url>', 'URL to extract component from')
+    .argument('[url]', 'URL to extract component from')
     .option('-s, --selector <selector>', 'CSS selector to target element')
     .option('-f, --find <query>', 'Natural language description to find element')
     .option('--framework <framework>', 'Output framework (react|vue|svelte|html)', 'react')
@@ -33,8 +33,21 @@ export function createProgram(): Command {
     .option('-i, --interactive', 'Run in interactive mode with visible browser')
     .option('-a, --assets', 'Include assets (images, fonts)')
     .option('-v, --verbose', 'Verbose output')
+    .option('-b, --batch <file>', 'Extract multiple components from a JSON config file')
     .action(async (url, options) => {
       try {
+        // Batch mode: --batch takes precedence
+        if (options.batch) {
+          await runBatch(options.batch, options);
+          return;
+        }
+
+        // Single extraction: URL is required
+        if (!url) {
+          logError('URL is required. Use: snatch <url> --find "query" or snatch --batch <file>');
+          process.exit(1);
+        }
+
         await runSnatch(url, options);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -64,24 +77,6 @@ export function createProgram(): Command {
     .action(async (name, options) => {
       logInfo(`Removing component: ${name} from ${options.dir}`);
       logWarn('The clean command is not implemented yet');
-    });
-
-  // Batch command - extract multiple components
-  program
-    .command('batch <file>')
-    .description('Extract multiple components from a JSON config file')
-    .option('-v, --verbose', 'Verbose output')
-    .action(async (file, options) => {
-      try {
-        await runBatch(file, options);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        logError(message);
-        if (options.verbose && error instanceof Error && error.stack) {
-          console.error('\n' + error.stack);
-        }
-        process.exit(1);
-      }
     });
 
   return program;
