@@ -64,25 +64,22 @@ Fix ALL errors/warnings before continuing.
 
 ## Pipeline State
 Phase: refactor-hunt
-Feature: Browser Context Reuse
-Files-Validated: src/browser/browser.ts, src/orchestrator.ts, tests/unit/batch.test.ts
-Validation-Report: reports/validation-browser-context-reuse.md
+Feature: LLM Client Reuse
+Files-Validated: src/orchestrator.ts
+Validation-Report: reports/validation-llm-client-reuse.md
 
 ## Last Session (2026-01-17)
-**Feature**: Browser Context Reuse - Validated & Bugs Fixed
+**Feature**: LLM Client Reuse - Validated
 
 ### Changes Made
-- Added `isLaunched()`, `newPage()` to BrowserManager for context reuse
-- Modified `orchestrateBatch()` to launch browser once and share across components
-- Added `sharedBrowser` option to `orchestrate()` internal options
+- Added `sharedLLM?: LLMClient` to OrchestrateInternalOptions
+- Added `sharedLLM?: boolean` to StageContext for pattern symmetry
+- Modified `orchestrate()` to use shared LLM if provided
+- Modified `orchestrateBatch()` to create one LLMClient and share across components
 
 ### Bugs Fixed During Validation
-1. [HIGH] newPage() now clears page ref before creating new (prevents stale refs)
-2. [HIGH] orchestrateBatch returns proper BatchResult on launch failure
-3. [MEDIUM] newPage() catches page.close() errors (page may already be closed)
-4. [MEDIUM] isLaunched() now checks browser.isConnected()
-5. [LOW] Empty batch returns early without launching browser
+1. [MEDIUM] Added sharedLLM tracking flag for symmetry with browser pattern
 
 ### Test Status
 - 517 tests pass
-- New tests added for isLaunched(), newPage(), context reuse
+- No new tests needed (LLMClient is stateless, covered by existing integration tests)

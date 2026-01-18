@@ -56,6 +56,8 @@ interface StageContext {
   timing: PipelineTiming;
   /** If true, browser is shared and should not be closed by this orchestration */
   sharedBrowser?: boolean;
+  /** If true, LLM client is shared (for symmetry with browser pattern) */
+  sharedLLM?: boolean;
 }
 
 interface BrowseResult {
@@ -68,10 +70,12 @@ interface LocateStageResult {
   snapshot?: PageSnapshot;
 }
 
-/** Internal options for orchestrate with browser sharing support */
+/** Internal options for orchestrate with browser/LLM sharing support */
 interface OrchestrateInternalOptions {
   /** Shared browser manager - if provided, will be reused and not closed */
   sharedBrowser?: BrowserManager;
+  /** Shared LLM client - if provided, will be reused */
+  sharedLLM?: LLMClient;
 }
 
 // ============================================================================
@@ -388,18 +392,20 @@ export async function orchestrate(
   // Set verbose mode
   setVerbose(options.verbose ?? false);
 
-  // Use shared browser if provided, otherwise create new
-  const isShared = !!internalOpts.sharedBrowser;
+  // Use shared browser/LLM if provided, otherwise create new
+  const isBrowserShared = !!internalOpts.sharedBrowser;
+  const isLLMShared = !!internalOpts.sharedLLM;
   const browser = internalOpts.sharedBrowser ?? new BrowserManager({ headless: !options.interactive });
 
-  // Initialize context
+  // Initialize context - use shared resources if provided, otherwise create new
   const ctx: StageContext = {
     options,
     browser,
-    llm: new LLMClient(),
+    llm: internalOpts.sharedLLM ?? new LLMClient(),
     output: new OutputWriter({ baseDir: options.outputDir }),
     timing,
-    sharedBrowser: isShared,
+    sharedBrowser: isBrowserShared,
+    sharedLLM: isLLMShared,
   };
 
   try {
@@ -496,8 +502,9 @@ export async function orchestrateBatch(
 
   logVerbose(`Starting batch extraction of ${config.components.length} components`);
 
-  // Create shared browser for all components
+  // Create shared browser and LLM client for all components
   const sharedBrowser = new BrowserManager({ headless: true });
+  const sharedLLM = new LLMClient();
 
   // Launch browser - handle failure gracefully
   try {
@@ -542,7 +549,7 @@ export async function orchestrateBatch(
       };
 
       try {
-        const result = await orchestrate(snatchOptions, { sharedBrowser });
+        const result = await orchestrate(snatchOptions, { sharedBrowser, sharedLLM });
 
         if (result.success) {
           results.push({
