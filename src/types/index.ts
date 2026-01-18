@@ -27,6 +27,8 @@ export interface SnatchOptions {
   includeAssets?: boolean;
   /** Verbose logging */
   verbose?: boolean;
+  /** Generate Storybook stories */
+  generateStories?: boolean;
 }
 
 export type Framework = 'react' | 'vue' | 'svelte' | 'html';

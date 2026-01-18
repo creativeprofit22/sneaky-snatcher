@@ -63,16 +63,23 @@ Fix ALL errors/warnings before continuing.
 5. **Write** → Output files + download assets
 
 ## Pipeline State
-Phase: build
-Feature: CLI List and Clean Commands
-Files-To-Modify: src/cli/program.ts, src/output/writer.ts (for clean logic)
+Phase: refactor-hunt
+Feature: Storybook Story Generation
+Files-Validated: src/output/writer.ts, src/cli/program.ts, src/cli/options.ts, src/types/index.ts, src/orchestrator.ts
+Validation-Report: reports/validation-storybook-generation.md
 
 ## Last Session (2026-01-18)
-**Feature**: CLI List and Clean Commands - Build Phase
+**Feature**: Storybook Story Generation - VALIDATED
 
-### Pending Features
-1. `snatch list` - Scan directory and display extracted components with metadata
-2. `snatch clean <name>` - Remove a component and its files, update parent index
+### Implementation
+- `--stories` CLI flag generates Storybook stories alongside components
+- Supports React (.stories.tsx), Vue (.stories.ts), Svelte (.stories.ts)
+- CSF3 format with Meta, StoryObj types
 
-### Previous Feature
-- OutputWriter Reuse - Validated (see reports/validation-outputwriter-reuse.md)
+### Validation Fixes
+1. **Wiring fix**: orchestrator.ts now passes `generateStories` to OutputWriter
+2. **Import path fix**: React stories use original filename, not sanitized
+
+### Known Limitations
+- `.ts` files skip stories (treated as HTML)
+- Batch mode doesn't support `generateStories` yet

@@ -6,7 +6,7 @@
 
 import path from 'node:path';
 import fs from 'node:fs/promises';
-import type { OutputConfig, OutputResult, WrittenFile, TransformResult } from '../types/index.ts';
+import type { OutputConfig, OutputResult, WrittenFile, TransformResult, Framework } from '../types/index.ts';
 
 const DEFAULT_CONFIG: OutputConfig = {
   baseDir: './components',
@@ -106,6 +106,22 @@ export class OutputWriter {
       size: Buffer.byteLength(indexContent),
     });
 
+    // Generate Storybook story if enabled
+    if (this.config.generateStories) {
+      const framework = this.detectFramework(result.filename);
+      if (framework !== 'html') {
+        const storyContent = this.generateStory(componentName, result.filename, framework);
+        const storyFilename = this.getStoryFilename(result.filename, framework);
+        const storyPath = path.join(componentDir, storyFilename);
+        await fs.writeFile(storyPath, storyContent, 'utf-8');
+        files.push({
+          path: storyPath,
+          type: 'story',
+          size: Buffer.byteLength(storyContent),
+        });
+      }
+    }
+
     // Update parent index if enabled
     if (this.config.createIndex) {
       await this.updateParentIndex(componentName);
@@ -138,6 +154,106 @@ export class OutputWriter {
     }
 
     return lines.join('\n') + '\n';
+  }
+
+  /**
+   * Detect framework from filename extension
+   */
+  private detectFramework(filename: string): Framework {
+    if (filename.endsWith('.tsx') || filename.endsWith('.jsx')) {
+      return 'react';
+    }
+    if (filename.endsWith('.vue')) {
+      return 'vue';
+    }
+    if (filename.endsWith('.svelte')) {
+      return 'svelte';
+    }
+    return 'html';
+  }
+
+  /**
+   * Get story filename based on component filename and framework
+   */
+  private getStoryFilename(componentFilename: string, framework: Framework): string {
+    const baseName = componentFilename.replace(/\.[^.]+$/, '');
+    switch (framework) {
+      case 'react':
+        return `${baseName}.stories.tsx`;
+      case 'vue':
+      case 'svelte':
+        return `${baseName}.stories.ts`;
+      default:
+        return `${baseName}.stories.ts`;
+    }
+  }
+
+  /**
+   * Generate Storybook story content (CSF3 format)
+   */
+  private generateStory(componentName: string, componentFilename: string, framework: Framework): string {
+    const safeComponentName = sanitizeIdentifier(componentName);
+    const componentFileNoExt = componentFilename.replace(/\.[^.]+$/, '');
+
+    switch (framework) {
+      case 'react':
+        // React: import without extension, use original filename (not sanitized)
+        return this.generateReactStory(safeComponentName, componentFileNoExt);
+      case 'vue':
+        return this.generateVueStory(safeComponentName, componentFilename);
+      case 'svelte':
+        return this.generateSvelteStory(safeComponentName, componentFilename);
+      default:
+        return '';
+    }
+  }
+
+  private generateReactStory(componentName: string, componentFile: string): string {
+    return `import type { Meta, StoryObj } from '@storybook/react';
+import { ${componentName} } from './${componentFile}';
+
+const meta: Meta<typeof ${componentName}> = {
+  title: 'Components/${componentName}',
+  component: ${componentName},
+};
+
+export default meta;
+type Story = StoryObj<typeof ${componentName}>;
+
+export const Default: Story = {};
+`;
+  }
+
+  private generateVueStory(componentName: string, componentFilename: string): string {
+    return `import type { Meta, StoryObj } from '@storybook/vue3';
+import ${componentName} from './${componentFilename}';
+
+const meta: Meta<typeof ${componentName}> = {
+  title: 'Components/${componentName}',
+  component: ${componentName},
+};
+
+export default meta;
+type Story = StoryObj<typeof ${componentName}>;
+
+export const Default: Story = {};
+`;
+  }
+
+  private generateSvelteStory(componentName: string, componentFilename: string): string {
+    return `import type { Meta, StoryObj } from '@storybook/svelte';
+import ${componentName} from './${componentFilename}';
+
+const meta: Meta<typeof ${componentName}> = {
+  title: 'Components/${componentName}',
+  component: ${componentName},
+};
+
+export default meta;
+type Story = StoryObj<typeof ${componentName}>;
+
+export const Default: Story = {};
+`;
   }
 
   /**

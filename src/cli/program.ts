@@ -35,6 +35,7 @@ export function createProgram(): Command {
     .option('-n, --name <name>', 'Component name')
     .option('-i, --interactive', 'Run in interactive mode with visible browser')
     .option('-a, --assets', 'Include assets (images, fonts)')
+    .option('--stories', 'Generate Storybook story files')
     .option('-v, --verbose', 'Verbose output')
     .option('-b, --batch <file>', 'Extract multiple components from a JSON config file')
     .action(async (url, options) => {
@@ -122,6 +123,7 @@ async function runSnatch(url: string, rawOptions: Record<string, unknown>): Prom
     interactive: parsed.interactive || !baseConfig.headless,
     includeAssets: parsed.includeAssets || baseConfig.includeAssets,
     verbose: parsed.verbose || baseConfig.verbose,
+    generateStories: parsed.generateStories,
   };
 
   // Validate options

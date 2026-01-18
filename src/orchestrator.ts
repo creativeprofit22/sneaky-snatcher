@@ -405,9 +405,12 @@ export async function orchestrate(
   // Initialize context - use shared resources if provided, otherwise create new
   // Note: when using shared output, we update its config to use this component's outputDir
   // IMPORTANT: Batch processing is sequential - setConfig() is safe because components are processed one at a time
-  const output = internalOpts.sharedOutput ?? new OutputWriter({ baseDir: options.outputDir });
+  const output = internalOpts.sharedOutput ?? new OutputWriter({
+    baseDir: options.outputDir,
+    generateStories: options.generateStories,
+  });
   if (internalOpts.sharedOutput) {
-    output.setConfig({ baseDir: options.outputDir });
+    output.setConfig({ baseDir: options.outputDir, generateStories: options.generateStories });
   }
 
   const ctx: StageContext = {

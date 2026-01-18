@@ -145,6 +145,7 @@ export function parseOptions(raw: Record<string, unknown>): Partial<SnatchOption
     interactive: Boolean(raw.interactive),
     includeAssets: Boolean(raw.assets || raw.includeAssets),
     verbose: Boolean(raw.verbose),
+    generateStories: Boolean(raw.stories || raw.generateStories),
   };
 }
 
