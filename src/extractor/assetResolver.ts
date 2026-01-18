@@ -4,6 +4,8 @@
  * Finds and downloads assets (images, fonts, icons) referenced by elements.
  */
 
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import type { Page } from 'playwright';
 import type { Asset } from '../types/index.ts';
 

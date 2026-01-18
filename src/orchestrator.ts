@@ -20,7 +20,6 @@ import { LLMClient, locateElement, transformToComponent, generateComponentName }
 import { OutputWriter, downloadAssets } from './output/index.ts';
 import {
   createSpinner,
-  logSuccess,
   logError,
   logVerbose,
   logSummary,
@@ -99,7 +98,7 @@ export async function orchestrate(options: SnatchOptions): Promise<PipelineResul
       logVerbose(`Found element: ${locateResult.ref} (confidence: ${locateResult.confidence})`);
 
       // Resolve ref to selector
-      selector = await resolveRefToSelector(page, locateResult.ref);
+      selector = (await resolveRefToSelector(page, locateResult.ref)) ?? undefined;
       if (!selector) {
         throw new Error(`Could not resolve element reference: ${locateResult.ref}`);
       }

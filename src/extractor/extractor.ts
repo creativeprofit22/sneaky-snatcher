@@ -5,7 +5,7 @@
  */
 
 import type { Page } from 'playwright';
-import type { ExtractedElement, Asset } from '../types/index.ts';
+import type { ExtractedElement } from '../types/index.ts';
 import { StyleReducer } from './styleReducer.ts';
 import { resolveAssets } from './assetResolver.ts';
 

@@ -5,7 +5,6 @@
  */
 
 import * as fs from 'fs/promises';
-import * as path from 'path';
 
 /**
  * Generate new index file content

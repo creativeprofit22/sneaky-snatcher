@@ -5,7 +5,8 @@
  */
 
 import type { LLMConfig, TokenUsage } from '../types/index.ts';
-import { askClaude, checkClaude, ClaudeError } from 'subclaude';
+// @ts-ignore - subclaude has no type declarations
+import { askClaude, checkClaude } from 'subclaude';
 import { LLMError, LLMNotAvailableError, LLMTimeoutError } from '../errors/index.ts';
 
 const DEFAULT_CONFIG: LLMConfig = {
@@ -55,8 +56,9 @@ export class LLMClient {
           : undefined,
       };
     } catch (error) {
-      if (error instanceof ClaudeError) {
-        // Map subclaude errors to our error classes
+      // Handle error - subclaude's ClaudeError extends Error
+      if (error instanceof Error) {
+        // Map subclaude errors to our error classes based on message content
         if (error.message.includes('CLI_NOT_FOUND') || error.message.includes('NOT_AUTHENTICATED')) {
           throw new LLMNotAvailableError(error.message);
         }
@@ -65,7 +67,7 @@ export class LLMClient {
         }
         throw new LLMError(error.message, error);
       }
-      throw new LLMError(error instanceof Error ? error.message : String(error));
+      throw new LLMError(String(error));
     }
   }
 

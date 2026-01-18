@@ -8,11 +8,18 @@
 import type { Page } from 'playwright';
 import type { AccessibilityNode, PageSnapshot } from '../types/index.ts';
 
+/** Playwright accessibility snapshot node structure */
+interface AccessibilitySnapshotNode {
+  role?: string;
+  name?: string;
+  children?: AccessibilitySnapshotNode[];
+}
+
 /**
  * Create accessibility snapshot of the page
  */
 export async function createAccessibilitySnapshot(page: Page): Promise<PageSnapshot> {
-  const snapshot = await page.accessibility.snapshot();
+  const snapshot = await (page as Page & { accessibility: { snapshot(): Promise<AccessibilitySnapshotNode | null> } }).accessibility.snapshot();
   const tree = processNode(snapshot, 0);
 
   return {
@@ -27,7 +34,7 @@ export async function createAccessibilitySnapshot(page: Page): Promise<PageSnaps
  * Process accessibility node recursively, adding semantic references
  */
 function processNode(
-  node: Awaited<ReturnType<Page['accessibility']['snapshot']>>,
+  node: AccessibilitySnapshotNode | null,
   index: number,
   parentRef = ''
 ): AccessibilityNode | null {
@@ -43,8 +50,8 @@ function processNode(
 
   if (node.children && node.children.length > 0) {
     processed.children = node.children
-      .map((child, i) => processNode(child, i, ref))
-      .filter((n): n is AccessibilityNode => n !== null);
+      .map((child: AccessibilitySnapshotNode, i: number) => processNode(child, i, ref))
+      .filter((n: AccessibilityNode | null): n is AccessibilityNode => n !== null);
   }
 
   return processed;

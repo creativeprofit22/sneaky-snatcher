@@ -126,7 +126,7 @@ export async function launchPicker(page: Page): Promise<PickerResult> {
       }
 
       // Try data attributes
-      for (const attr of el.attributes) {
+      for (const attr of Array.from(el.attributes)) {
         if (attr.name.startsWith('data-') && attr.value) {
           const dataSelector = `[${attr.name}="${CSS.escape(attr.value)}"]`;
           if (document.querySelectorAll(dataSelector).length === 1) {
