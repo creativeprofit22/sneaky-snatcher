@@ -8,6 +8,7 @@ import type { PageSnapshot, LocateRequest, LocateResult } from '../types/index.t
 import { LLMClient } from './client.ts';
 import { PROMPTS } from './prompts.ts';
 import { formatTreeForLLM } from '../browser/snapshot.ts';
+import { buildPrompt, truncateForPreview } from './utils.ts';
 
 /**
  * Locate element using natural language query
@@ -18,9 +19,10 @@ export async function locateElement(
 ): Promise<LocateResult> {
   const treeString = formatTreeForLLM(request.snapshot.tree);
 
-  const prompt = PROMPTS.LOCATE_ELEMENT
-    .replace('{{TREE}}', treeString)
-    .replace('{{QUERY}}', request.query);
+  const prompt = buildPrompt(PROMPTS.LOCATE_ELEMENT, {
+    TREE: treeString,
+    QUERY: request.query,
+  });
 
   const response = await client.ask(prompt, PROMPTS.LOCATE_SYSTEM);
 
@@ -28,12 +30,20 @@ export async function locateElement(
   const refMatch = response.content.match(/@e[\d.]+/);
 
   if (!refMatch) {
-    throw new Error(`Could not locate element matching: "${request.query}"`);
+    const preview = truncateForPreview(response.content);
+    throw new Error(
+      `Could not locate element matching: "${request.query}". ` +
+      `LLM response preview: ${preview}`
+    );
   }
 
   // Extract confidence if provided
   const confidenceMatch = response.content.match(/confidence[:\s]+(\d+(?:\.\d+)?)/i);
   const confidence = confidenceMatch ? parseFloat(confidenceMatch[1]!) : 0.8;
+
+  if (!confidenceMatch) {
+    console.warn(`[locator] No confidence score in LLM response for query "${request.query}", using default: 0.8`);
+  }
 
   return {
     ref: refMatch[0],
@@ -43,19 +53,13 @@ export async function locateElement(
 }
 
 /**
- * Batch locate multiple elements
+ * Batch locate multiple elements (parallel processing)
  */
 export async function locateElements(
   client: LLMClient,
   snapshot: PageSnapshot,
   queries: string[]
 ): Promise<LocateResult[]> {
-  const results: LocateResult[] = [];
-
-  for (const query of queries) {
-    const result = await locateElement(client, { snapshot, query });
-    results.push(result);
-  }
-
-  return results;
+  const promises = queries.map((query) => locateElement(client, { snapshot, query }));
+  return Promise.all(promises);
 }

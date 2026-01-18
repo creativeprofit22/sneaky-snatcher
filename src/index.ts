@@ -47,7 +47,7 @@ export {
 export { BrowserManager, createAccessibilitySnapshot, resolveRefToSelector } from './browser/index.ts';
 
 // Extractor module
-export { extractElement, StyleReducer, resolveAssets, downloadAsset } from './extractor/index.ts';
+export { extractElement, StyleReducer, resolveAssets } from './extractor/index.ts';
 
 // LLM module
 export { LLMClient, locateElement, transformToComponent, PROMPTS } from './llm/index.ts';

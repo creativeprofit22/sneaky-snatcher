@@ -7,6 +7,39 @@
 import type { TransformRequest, TransformResult, Framework, Styling } from '../types/index.ts';
 import { LLMClient } from './client.ts';
 import { PROMPTS } from './prompts.ts';
+import { buildPrompt } from './utils.ts';
+
+// Regex patterns for parsing LLM response
+const CODE_BLOCK_PATTERN = /```(?:tsx?|jsx?|vue|svelte|html)?\n([\s\S]*?)```/;
+const CSS_BLOCK_PATTERN = /```css\n([\s\S]*?)```/;
+const PROPS_INTERFACE_PATTERN = /interface\s+\w+Props\s*\{[\s\S]*?\}/;
+const VALID_CODE_PATTERN = /(?:function|const|export|class|<\w+|interface|type\s+\w+)/;
+
+// Valid framework and styling options
+const VALID_FRAMEWORKS: readonly Framework[] = ['react', 'vue', 'svelte', 'html'];
+const VALID_STYLING: readonly Styling[] = ['tailwind', 'css-modules', 'vanilla', 'inline'];
+
+/**
+ * Extract and validate a code block from LLM response
+ */
+function extractCodeBlock(content: string, fallback: string): string {
+  const match = content.match(CODE_BLOCK_PATTERN);
+  const rawCode = match?.[1];
+
+  if (rawCode && rawCode.trim().length > 0 && VALID_CODE_PATTERN.test(rawCode)) {
+    return rawCode;
+  }
+  return fallback;
+}
+
+/**
+ * Extract optional content from a regex match
+ */
+function extractOptionalMatch(content: string, pattern: RegExp, captureGroup = 0): string | undefined {
+  const match = content.match(pattern);
+  const value = match?.[captureGroup];
+  return value && value.trim().length > 0 ? value : undefined;
+}
 
 /**
  * Transform HTML+CSS to component
@@ -20,17 +53,9 @@ export async function transformToComponent(
 
   const response = await client.ask(prompt, systemPrompt);
 
-  // Parse response to extract code
-  const codeMatch = response.content.match(/```(?:tsx?|jsx?|vue|svelte|html)?\n([\s\S]*?)```/);
-  const code = codeMatch?.[1] || response.content;
-
-  // Extract styles if separate
-  const stylesMatch = response.content.match(/```css\n([\s\S]*?)```/);
-  const styles = stylesMatch?.[1];
-
-  // Extract props interface
-  const propsMatch = response.content.match(/interface\s+\w+Props\s*\{[\s\S]*?\}/);
-  const propsInterface = propsMatch?.[0];
+  const code = extractCodeBlock(response.content, response.content);
+  const styles = extractOptionalMatch(response.content, CSS_BLOCK_PATTERN, 1);
+  const propsInterface = extractOptionalMatch(response.content, PROPS_INTERFACE_PATTERN);
 
   return {
     code: code.trim(),
@@ -42,16 +67,34 @@ export async function transformToComponent(
 }
 
 /**
- * Build transformation prompt
+ * Build transformation prompt with parameter validation
  */
 function buildTransformPrompt(request: TransformRequest): string {
-  return PROMPTS.TRANSFORM_COMPONENT
-    .replace('{{HTML}}', request.html)
-    .replace('{{CSS}}', request.css)
-    .replace('{{COMPONENT_NAME}}', request.componentName)
-    .replace('{{FRAMEWORK}}', request.framework)
-    .replace('{{STYLING}}', request.styling)
-    .replace('{{INSTRUCTIONS}}', request.instructions || 'None');
+  // Validate framework parameter
+  if (!VALID_FRAMEWORKS.includes(request.framework)) {
+    console.warn(
+      `[transformer] Invalid framework "${request.framework}", defaulting to "react". Valid options: ${VALID_FRAMEWORKS.join(', ')}`
+    );
+  }
+
+  // Validate styling parameter
+  if (!VALID_STYLING.includes(request.styling)) {
+    console.warn(
+      `[transformer] Invalid styling "${request.styling}", defaulting to "tailwind". Valid options: ${VALID_STYLING.join(', ')}`
+    );
+  }
+
+  const framework = VALID_FRAMEWORKS.includes(request.framework) ? request.framework : 'react';
+  const styling = VALID_STYLING.includes(request.styling) ? request.styling : 'tailwind';
+
+  return buildPrompt(PROMPTS.TRANSFORM_COMPONENT, {
+    HTML: request.html,
+    CSS: request.css,
+    COMPONENT_NAME: request.componentName,
+    FRAMEWORK: framework,
+    STYLING: styling,
+    INSTRUCTIONS: request.instructions || 'None',
+  });
 }
 
 /**
@@ -92,6 +135,18 @@ export function validateComponentName(name: string): boolean {
   return /^[A-Z][a-zA-Z0-9]*$/.test(name);
 }
 
+// Reserved JavaScript/TypeScript keywords that cannot be used as component names
+const RESERVED_KEYWORDS = new Set([
+  'break', 'case', 'catch', 'class', 'const', 'continue', 'debugger', 'default',
+  'delete', 'do', 'else', 'enum', 'export', 'extends', 'false', 'finally', 'for',
+  'function', 'if', 'import', 'in', 'instanceof', 'new', 'null', 'return', 'super',
+  'switch', 'this', 'throw', 'true', 'try', 'typeof', 'var', 'void', 'while', 'with',
+  'yield', 'let', 'static', 'implements', 'interface', 'package', 'private',
+  'protected', 'public', 'await', 'abstract', 'boolean', 'byte', 'char', 'double',
+  'final', 'float', 'goto', 'int', 'long', 'native', 'short', 'synchronized',
+  'throws', 'transient', 'volatile',
+]);
+
 /**
  * Generate component name from selector or description
  */
@@ -103,10 +158,25 @@ export function generateComponentName(source: string): string {
     .trim();
 
   // Convert to PascalCase
-  const pascalCase = cleaned
+  let pascalCase = cleaned
     .split(' ')
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
     .join('');
 
-  return pascalCase || 'ExtractedComponent';
+  // Fallback for empty result
+  if (!pascalCase) {
+    return 'ExtractedComponent';
+  }
+
+  // Ensure starts with uppercase letter (not a number)
+  if (/^\d/.test(pascalCase)) {
+    pascalCase = 'Component' + pascalCase;
+  }
+
+  // Check for reserved keywords (case-insensitive for safety)
+  if (RESERVED_KEYWORDS.has(pascalCase.toLowerCase())) {
+    pascalCase = pascalCase + 'Component';
+  }
+
+  return pascalCase;
 }

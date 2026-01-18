@@ -13,56 +13,90 @@ interface ValidationResult {
 }
 
 /**
+ * Validate URL format
+ */
+function validateUrl(url: string | undefined): string | null {
+  if (!url) {
+    return 'URL is required';
+  }
+  try {
+    new URL(url);
+    return null;
+  } catch {
+    try {
+      new URL(`https://${url}`);
+      return null;
+    } catch {
+      return `Invalid URL: ${url}`;
+    }
+  }
+}
+
+/**
+ * Validate selector mode options
+ */
+function validateSelectorMode(options: SnatchOptions): string | null {
+  const hasSelector = Boolean(options.selector);
+  const hasFind = Boolean(options.find);
+  const hasInteractive = Boolean(options.interactive);
+
+  if (!hasSelector && !hasFind && !hasInteractive) {
+    return 'Either --selector, --find, or --interactive is required';
+  }
+  if (hasSelector && hasFind) {
+    return 'Cannot use both --selector and --find';
+  }
+  if (hasInteractive && (hasSelector || hasFind)) {
+    return '--interactive cannot be used with --selector or --find';
+  }
+  return null;
+}
+
+/**
+ * Validate framework option
+ */
+function validateFramework(framework: Framework): string | null {
+  if (!VALID_FRAMEWORKS.includes(framework)) {
+    return `Invalid framework: ${framework}. Valid: ${VALID_FRAMEWORKS.join(', ')}`;
+  }
+  return null;
+}
+
+/**
+ * Validate styling option
+ */
+function validateStyling(styling: Styling): string | null {
+  if (!VALID_STYLING.includes(styling)) {
+    return `Invalid styling: ${styling}. Valid: ${VALID_STYLING.join(', ')}`;
+  }
+  return null;
+}
+
+/**
+ * Validate component name format
+ */
+function validateComponentName(name: string | undefined): string | null {
+  if (name && !/^[A-Z][a-zA-Z0-9]*$/.test(name)) {
+    return 'Component name must be PascalCase (e.g., MyComponent)';
+  }
+  return null;
+}
+
+/**
  * Validate snatch options
  */
 export function validateOptions(options: SnatchOptions): ValidationResult {
-  const errors: string[] = [];
+  const validators = [
+    () => validateUrl(options.url),
+    () => validateSelectorMode(options),
+    () => validateFramework(options.framework),
+    () => validateStyling(options.styling),
+    () => validateComponentName(options.componentName),
+  ];
 
-  // URL validation
-  if (!options.url) {
-    errors.push('URL is required');
-  } else {
-    try {
-      new URL(options.url);
-    } catch {
-      // Try adding https://
-      try {
-        new URL(`https://${options.url}`);
-      } catch {
-        errors.push(`Invalid URL: ${options.url}`);
-      }
-    }
-  }
-
-  // Must have selector, find, or interactive mode
-  if (!options.selector && !options.find && !options.interactive) {
-    errors.push('Either --selector, --find, or --interactive is required');
-  }
-
-  // Cannot have both selector and find
-  if (options.selector && options.find) {
-    errors.push('Cannot use both --selector and --find');
-  }
-
-  // Interactive mode is mutually exclusive with selector/find
-  if (options.interactive && (options.selector || options.find)) {
-    errors.push('--interactive cannot be used with --selector or --find');
-  }
-
-  // Framework validation
-  if (!VALID_FRAMEWORKS.includes(options.framework)) {
-    errors.push(`Invalid framework: ${options.framework}. Valid: ${VALID_FRAMEWORKS.join(', ')}`);
-  }
-
-  // Styling validation
-  if (!VALID_STYLING.includes(options.styling)) {
-    errors.push(`Invalid styling: ${options.styling}. Valid: ${VALID_STYLING.join(', ')}`);
-  }
-
-  // Component name validation (if provided)
-  if (options.componentName && !/^[A-Z][a-zA-Z0-9]*$/.test(options.componentName)) {
-    errors.push('Component name must be PascalCase (e.g., MyComponent)');
-  }
+  const errors = validators
+    .map((validate) => validate())
+    .filter((error): error is string => error !== null);
 
   return {
     valid: errors.length === 0,

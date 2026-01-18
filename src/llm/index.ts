@@ -10,3 +10,4 @@ export { LLMClient } from './client.ts';
 export { locateElement } from './locator.ts';
 export { transformToComponent, generateComponentName } from './transformer.ts';
 export { PROMPTS } from './prompts.ts';
+export { buildPrompt, truncateForPreview } from './utils.ts';

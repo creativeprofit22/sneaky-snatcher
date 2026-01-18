@@ -7,6 +7,9 @@
 
 import type { Page } from 'playwright';
 import type { AccessibilityNode, PageSnapshot } from '../types/index.ts';
+// Note: generateSimpleSelector logic is duplicated in page.evaluate() below
+// because browser context cannot import Node.js modules. See selectorUtils.ts
+// for the canonical implementation.
 
 /** Playwright accessibility snapshot node structure */
 interface AccessibilitySnapshotNode {
@@ -15,11 +18,28 @@ interface AccessibilitySnapshotNode {
   children?: AccessibilitySnapshotNode[];
 }
 
+/** Type guard for page with accessibility API */
+function hasAccessibilityAPI(
+  page: Page
+): page is Page & { accessibility: { snapshot(): Promise<AccessibilitySnapshotNode | null> } } {
+  return (
+    'accessibility' in page &&
+    typeof page.accessibility === 'object' &&
+    page.accessibility !== null &&
+    'snapshot' in page.accessibility &&
+    typeof page.accessibility.snapshot === 'function'
+  );
+}
+
 /**
  * Create accessibility snapshot of the page
  */
 export async function createAccessibilitySnapshot(page: Page): Promise<PageSnapshot> {
-  const snapshot = await (page as Page & { accessibility: { snapshot(): Promise<AccessibilitySnapshotNode | null> } }).accessibility.snapshot();
+  if (!hasAccessibilityAPI(page)) {
+    throw new Error('Page does not support accessibility API');
+  }
+
+  const snapshot = await page.accessibility.snapshot();
   const tree = processNode(snapshot, 0);
 
   return {
@@ -61,40 +81,64 @@ function processNode(
  * Resolve semantic reference to CSS selector
  */
 export async function resolveRefToSelector(page: Page, ref: string): Promise<string | null> {
-  // Parse the reference path (e.g., "@e0.1.2" -> [0, 1, 2])
-  const path = ref
-    .replace('@e', '')
-    .split('.')
-    .map((n) => parseInt(n, 10));
-
-  // Use page.evaluate to find the element by traversing accessibility tree
-  const selector = await page.evaluate((refPath: number[]) => {
-    // This is a simplified approach - in production, we'd use a more robust method
-    // that maps accessibility nodes to actual DOM elements
-    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT);
-
-    let count = 0;
-    let current: Node | null = walker.currentNode;
-
-    // Simplified: just count through elements (real impl would follow tree structure)
-    while (current && count < refPath[0]!) {
-      current = walker.nextNode();
-      count++;
-    }
-
-    if (current instanceof Element) {
-      // Generate a unique selector for the element
-      if (current.id) {
-        return `#${current.id}`;
-      }
-      if (current.className) {
-        const classes = current.className.split(' ').filter(Boolean).join('.');
-        return `.${classes}`;
-      }
-      return current.tagName.toLowerCase();
-    }
-
+  // Validate ref format
+  if (!ref.startsWith('@e')) {
     return null;
+  }
+
+  // Parse the reference path (e.g., "@e0.1.2" -> [0, 1, 2])
+  const pathStr = ref.slice(2); // Remove '@e' prefix
+  if (!pathStr) {
+    return null;
+  }
+
+  const path = pathStr.split('.').map((n) => parseInt(n, 10));
+
+  // Validate parsed path
+  if (path.some((n) => isNaN(n) || n < 0)) {
+    return null;
+  }
+
+  // Use page.evaluate to find the element by traversing the DOM tree
+  const selector = await page.evaluate((refPath: number[]) => {
+    // Simple selector generator (mirrors selectorUtils.generateSimpleSelector)
+    function generateSimpleSelector(el: Element): string {
+      if (el.id) {
+        return `#${CSS.escape(el.id)}`;
+      }
+      if (el.className && typeof el.className === 'string') {
+        const classes = el.className.split(' ').filter(Boolean);
+        if (classes.length > 0) {
+          return `.${classes.map((c) => CSS.escape(c)).join('.')}`;
+        }
+      }
+      return el.tagName.toLowerCase();
+    }
+
+    // Traverse the DOM tree following the path indices
+    // Each index refers to the nth element child at that level
+    let current: Element | null = document.body;
+
+    for (const index of refPath) {
+      if (!current) {
+        return null;
+      }
+
+      // Get element children only (skip text nodes, comments, etc.)
+      const children = Array.from(current.children);
+
+      if (index >= children.length) {
+        return null;
+      }
+
+      current = children[index] ?? null;
+    }
+
+    if (!current) {
+      return null;
+    }
+
+    return generateSimpleSelector(current);
   }, path);
 
   return selector;

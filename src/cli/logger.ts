@@ -28,31 +28,45 @@ export function createSpinner(text: string): Ora {
 }
 
 /**
+ * Log a formatted message with icon
+ */
+function logFormatted(
+  method: 'log' | 'error' | 'warn',
+  icon: string,
+  iconColor: typeof chalk.green,
+  message: string,
+  messageColor?: typeof chalk.green
+): void {
+  const formattedMessage = messageColor ? messageColor(message) : message;
+  console[method](iconColor(icon) + ' ' + formattedMessage);
+}
+
+/**
  * Log success message
  */
 export function logSuccess(message: string): void {
-  console.log(chalk.green('✓') + ' ' + message);
+  logFormatted('log', '✓', chalk.green, message);
 }
 
 /**
  * Log error message
  */
 export function logError(message: string): void {
-  console.error(chalk.red('✗') + ' ' + chalk.red(message));
+  logFormatted('error', '✗', chalk.red, message, chalk.red);
 }
 
 /**
  * Log warning message
  */
-export function logWarning(message: string): void {
-  console.warn(chalk.yellow('⚠') + ' ' + chalk.yellow(message));
+export function logWarn(message: string): void {
+  logFormatted('warn', '⚠', chalk.yellow, message, chalk.yellow);
 }
 
 /**
  * Log info message
  */
 export function logInfo(message: string): void {
-  console.log(chalk.blue('ℹ') + ' ' + message);
+  logFormatted('log', 'ℹ', chalk.blue, message);
 }
 
 /**
@@ -62,14 +76,6 @@ export function logVerbose(message: string): void {
   if (verboseMode) {
     console.log(chalk.gray('  ' + message));
   }
-}
-
-/**
- * Log step in progress
- */
-export function logStep(step: number, total: number, message: string): void {
-  const prefix = chalk.dim(`[${step}/${total}]`);
-  console.log(`${prefix} ${message}`);
 }
 
 /**
@@ -88,17 +94,4 @@ export function logSummary(results: {
   console.log('');
   console.log(chalk.dim(`  Files: ${results.files} | Assets: ${results.assets}`));
   console.log('');
-}
-
-/**
- * Log timing information
- */
-export function logTiming(timing: Record<string, number>): void {
-  if (!verboseMode) return;
-
-  console.log('');
-  console.log(chalk.dim('Timing:'));
-  for (const [step, ms] of Object.entries(timing)) {
-    console.log(chalk.dim(`  ${step}: ${ms}ms`));
-  }
 }

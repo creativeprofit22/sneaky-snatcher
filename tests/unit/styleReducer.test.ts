@@ -73,7 +73,8 @@ describe('StyleReducer', () => {
 
       const result = reducer.reduce(styles);
 
-      expect(result).toContain('margin: 10px 20px 10px 20px');
+      // optimizeBoxShorthand compresses 10px 20px 10px 20px to 10px 20px (top/bottom + left/right equal)
+      expect(result).toContain('margin: 10px 20px');
       expect(result).not.toContain('margin-top');
     });
 

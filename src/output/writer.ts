@@ -15,6 +15,32 @@ const DEFAULT_CONFIG: OutputConfig = {
   assetDir: 'assets',
 };
 
+/** Characters not allowed in component names (filesystem-safe) */
+const INVALID_NAME_CHARS = /[<>:"/\\|?*\x00-\x1f]/;
+
+/**
+ * Validate component name is safe for filesystem and code generation
+ */
+function validateComponentName(name: string): void {
+  if (typeof name !== 'string' || name.trim() === '') {
+    throw new Error('Component name must be a non-empty string');
+  }
+  if (INVALID_NAME_CHARS.test(name)) {
+    throw new Error(`Component name contains invalid characters: ${name}`);
+  }
+  if (name.startsWith('.') || name.startsWith('-')) {
+    throw new Error(`Component name cannot start with '.' or '-': ${name}`);
+  }
+}
+
+/**
+ * Sanitize identifier for safe use in generated code
+ */
+function sanitizeIdentifier(name: string): string {
+  // Remove characters unsafe for JS identifiers, keep only alphanumeric and underscore
+  return name.replace(/[^a-zA-Z0-9_$]/g, '_').replace(/^(\d)/, '_$1');
+}
+
 export class OutputWriter {
   private config: OutputConfig;
 
@@ -26,6 +52,12 @@ export class OutputWriter {
    * Write component and related files to disk
    */
   async write(componentName: string, result: TransformResult): Promise<OutputResult> {
+    // Input validation
+    validateComponentName(componentName);
+    if (!result || typeof result.code !== 'string' || typeof result.filename !== 'string') {
+      throw new Error('Invalid TransformResult: must have code and filename');
+    }
+
     const files: WrittenFile[] = [];
     const componentDir = path.join(this.config.baseDir, componentName);
 
@@ -92,13 +124,16 @@ export class OutputWriter {
   private generateComponentIndex(componentName: string, result: TransformResult): string {
     const lines: string[] = [];
 
-    // Export component
+    // Sanitize identifiers for safe code generation
+    const safeComponentName = sanitizeIdentifier(componentName);
     const componentFile = result.filename.replace(/\.[^.]+$/, '');
-    lines.push(`export { ${componentName} } from './${componentFile}.js';`);
+    const safeComponentFile = sanitizeIdentifier(componentFile);
+
+    lines.push(`export { ${safeComponentName} } from './${safeComponentFile}.js';`);
 
     // Export types if available
     if (result.propsInterface) {
-      const propsName = `${componentName}Props`;
+      const propsName = sanitizeIdentifier(`${componentName}Props`);
       lines.push(`export type { ${propsName} } from './types.js';`);
     }
 
@@ -109,6 +144,9 @@ export class OutputWriter {
    * Update parent directory index
    */
   private async updateParentIndex(componentName: string): Promise<void> {
+    // Input validation (componentName already validated in write(), but guard for direct calls)
+    validateComponentName(componentName);
+
     const indexPath = path.join(this.config.baseDir, 'index.ts');
 
     let content = '';

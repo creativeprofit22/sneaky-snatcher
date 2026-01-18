@@ -225,10 +225,12 @@ export class StyleReducer {
    * Check if value is browser default
    */
   private isDefault(prop: string, value: string): boolean {
+    if (value === null || value === undefined) return false;
     const defaults = BROWSER_DEFAULTS[prop];
     if (!defaults) return false;
 
-    return defaults.includes(value.toLowerCase());
+    const normalizedValue = value.trim().toLowerCase();
+    return defaults.some((defaultVal) => defaultVal === normalizedValue);
   }
 
   /**
@@ -266,8 +268,12 @@ export class StyleReducer {
       result['margin-bottom'] &&
       result['margin-left']
     ) {
-      result['margin'] =
-        `${result['margin-top']} ${result['margin-right']} ${result['margin-bottom']} ${result['margin-left']}`;
+      result['margin'] = this.optimizeBoxShorthand(
+        result['margin-top'],
+        result['margin-right'],
+        result['margin-bottom'],
+        result['margin-left']
+      );
       delete result['margin-top'];
       delete result['margin-right'];
       delete result['margin-bottom'];
@@ -281,15 +287,59 @@ export class StyleReducer {
       result['padding-bottom'] &&
       result['padding-left']
     ) {
-      result['padding'] =
-        `${result['padding-top']} ${result['padding-right']} ${result['padding-bottom']} ${result['padding-left']}`;
+      result['padding'] = this.optimizeBoxShorthand(
+        result['padding-top'],
+        result['padding-right'],
+        result['padding-bottom'],
+        result['padding-left']
+      );
       delete result['padding-top'];
       delete result['padding-right'];
       delete result['padding-bottom'];
       delete result['padding-left'];
     }
 
+    // Border-radius shorthand
+    if (
+      result['border-top-left-radius'] &&
+      result['border-top-right-radius'] &&
+      result['border-bottom-right-radius'] &&
+      result['border-bottom-left-radius']
+    ) {
+      result['border-radius'] = this.optimizeBoxShorthand(
+        result['border-top-left-radius'],
+        result['border-top-right-radius'],
+        result['border-bottom-right-radius'],
+        result['border-bottom-left-radius']
+      );
+      delete result['border-top-left-radius'];
+      delete result['border-top-right-radius'];
+      delete result['border-bottom-right-radius'];
+      delete result['border-bottom-left-radius'];
+    }
+
     return result;
+  }
+
+  /**
+   * Optimize box shorthand values (margin, padding, border-radius)
+   * Converts 4 values to minimal shorthand form
+   */
+  private optimizeBoxShorthand(top: string, right: string, bottom: string, left: string): string {
+    // All 4 values equal: use single value
+    if (top === right && right === bottom && bottom === left) {
+      return top;
+    }
+    // Top/bottom equal and left/right equal: use 2 values
+    if (top === bottom && right === left) {
+      return `${top} ${right}`;
+    }
+    // Left/right equal: use 3 values
+    if (right === left) {
+      return `${top} ${right} ${bottom}`;
+    }
+    // All different: use 4 values
+    return `${top} ${right} ${bottom} ${left}`;
   }
 
   /**

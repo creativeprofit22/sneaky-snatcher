@@ -22,10 +22,326 @@ import {
   createSpinner,
   logError,
   logVerbose,
+  logWarn,
   logSummary,
   setVerbose,
   normalizeUrl,
 } from './cli/index.ts';
+import {
+  ValidationError,
+  ElementNotFoundError,
+  LLMError,
+  LLMNotAvailableError,
+  LLMTimeoutError,
+  isSnatchError,
+  formatError,
+} from './errors/index.ts';
+import type { Page } from 'playwright';
+import type { Ora } from 'ora';
+
+// ============================================================================
+// Types
+// ============================================================================
+
+interface StageContext {
+  options: SnatchOptions;
+  browser: BrowserManager;
+  llm: LLMClient;
+  output: OutputWriter;
+  timing: PipelineTiming;
+}
+
+interface BrowseResult {
+  url: string;
+  page: Page;
+}
+
+interface LocateStageResult {
+  selector: string;
+  snapshot?: PageSnapshot;
+}
+
+// ============================================================================
+// Stage Functions
+// ============================================================================
+
+/**
+ * Stage 1: Browse - Launch browser and navigate to URL
+ */
+async function browseAndNavigate(ctx: StageContext): Promise<BrowseResult> {
+  const spinner = createSpinner('Launching browser...');
+  spinner.start();
+  const start = Date.now();
+
+  try {
+    const url = normalizeUrl(ctx.options.url);
+    await ctx.browser.launch();
+    await ctx.browser.navigate(url);
+    logVerbose(`Navigated to: ${url}`);
+
+    ctx.timing.browse = Date.now() - start;
+    spinner.succeed(`Navigated to ${new URL(url).hostname}`);
+
+    // getPage() is guaranteed non-null after successful launch() and navigate()
+    const page = ctx.browser.getPage();
+    return { url, page };
+  } catch (error) {
+    spinner.fail('Failed to navigate');
+    throw error;
+  }
+}
+
+/**
+ * Stage 2: Locate - Find the target element
+ */
+async function locateTargetElement(
+  ctx: StageContext,
+  page: Page
+): Promise<LocateStageResult> {
+  const spinner = createSpinner('Locating element...');
+  spinner.start();
+  const start = Date.now();
+
+  try {
+    const result = await resolveElementSelector(ctx, page, spinner);
+
+    ctx.timing.locate = Date.now() - start;
+    spinner.succeed(`Located element: ${result.selector}`);
+
+    return result;
+  } catch (error) {
+    spinner.fail('Failed to locate element');
+    throw wrapLLMError(error);
+  }
+}
+
+/**
+ * Resolve element selector from options (direct, NLP, or interactive)
+ */
+async function resolveElementSelector(
+  ctx: StageContext,
+  page: Page,
+  spinner: Ora
+): Promise<LocateStageResult> {
+  const { options, llm } = ctx;
+
+  // Direct selector provided
+  if (options.selector) {
+    logVerbose(`Using selector: ${options.selector}`);
+    return { selector: options.selector };
+  }
+
+  // Natural language - need snapshot and LLM
+  if (options.find) {
+    const snapshot = await createAccessibilitySnapshot(page);
+    // Snapshot tree is guaranteed to be an array (may be empty for blank pages)
+    if (!snapshot.tree || snapshot.tree.length === 0) {
+      throw new ElementNotFoundError(
+        options.find,
+        'Page accessibility tree is empty - no elements to search'
+      );
+    }
+    logVerbose(`Accessibility tree has ${snapshot.tree.length} root nodes`);
+
+    const locateResult = await locateElement(llm, {
+      snapshot,
+      query: options.find,
+    });
+
+    if (!locateResult.ref) {
+      throw new ElementNotFoundError(
+        options.find,
+        'LLM did not return an element reference'
+      );
+    }
+    logVerbose(`Found element: ${locateResult.ref} (confidence: ${locateResult.confidence})`);
+
+    // Resolve ref to selector - resolveRefToSelector returns string | null
+    const resolvedSelector = await resolveRefToSelector(page, locateResult.ref);
+    if (!resolvedSelector) {
+      throw new ElementNotFoundError(
+        locateResult.ref,
+        `Could not resolve element reference: ${locateResult.ref}`
+      );
+    }
+
+    return { selector: resolvedSelector, snapshot };
+  }
+
+  // Interactive mode - launch visual picker
+  if (options.interactive) {
+    spinner.text = 'Waiting for element selection...';
+    const pickerResult = await ctx.browser.launchInteractivePicker();
+    logVerbose(`User selected: <${pickerResult.tagName}> "${pickerResult.textPreview}"`);
+    logVerbose(`Selector: ${pickerResult.selector}`);
+    return { selector: pickerResult.selector };
+  }
+
+  throw new ValidationError('selector', 'Either --selector, --find, or --interactive is required');
+}
+
+/**
+ * Stage 3: Extract - Get HTML and styles from element
+ */
+async function extractFromElement(
+  ctx: StageContext,
+  page: Page,
+  selector: string
+): Promise<ExtractedElement> {
+  const spinner = createSpinner('Extracting HTML and styles...');
+  spinner.start();
+  const start = Date.now();
+
+  try {
+    const extracted = await extractElement(page, selector);
+
+    const originalSize = extracted.html.length + (extracted.css?.length || 0);
+    logVerbose(`Extracted ${extracted.html.length} bytes HTML, ${extracted.css?.length || 0} bytes CSS`);
+    logVerbose(`Found ${extracted.assets.length} assets`);
+
+    ctx.timing.extract = Date.now() - start;
+    spinner.succeed(
+      `Extracted (${formatBytes(originalSize)} → ${formatBytes(extracted.html.length + extracted.css.length)})`
+    );
+
+    return extracted;
+  } catch (error) {
+    spinner.fail('Failed to extract element');
+    throw error;
+  }
+}
+
+/**
+ * Stage 4: Transform - Convert to framework component
+ */
+async function transformToFramework(
+  ctx: StageContext,
+  extracted: ExtractedElement,
+  componentName: string
+): Promise<TransformResult> {
+  const { options, llm } = ctx;
+  const spinner = createSpinner(
+    `Transforming to ${options.framework} + ${options.styling}...`
+  );
+  spinner.start();
+  const start = Date.now();
+
+  try {
+    const transformed = await transformToComponent(llm, {
+      html: extracted.html,
+      css: extracted.css,
+      framework: options.framework,
+      styling: options.styling,
+      componentName,
+    });
+
+    logVerbose(`Generated ${transformed.code.length} bytes of code`);
+    if (transformed.tokens) {
+      logVerbose(`Tokens used: ${transformed.tokens.total}`);
+    }
+
+    ctx.timing.transform = Date.now() - start;
+    spinner.succeed(`Transformed to ${options.framework}`);
+
+    return transformed;
+  } catch (error) {
+    spinner.fail('Failed to transform component');
+    throw wrapLLMError(error);
+  }
+}
+
+/**
+ * Stage 5: Write - Output files and download assets
+ */
+async function writeOutput(
+  ctx: StageContext,
+  componentName: string,
+  transformed: TransformResult,
+  extracted: ExtractedElement
+): Promise<OutputResult> {
+  const { options, output } = ctx;
+  const spinner = createSpinner('Writing files...');
+  spinner.start();
+  const start = Date.now();
+
+  try {
+    const result = await output.write(componentName, transformed);
+
+    // Download assets with graceful degradation
+    if (options.includeAssets && extracted.assets.length > 0) {
+      const downloaded = await downloadAssetsWithLogging(extracted.assets, options.outputDir);
+      result.assets = downloaded;
+    }
+
+    ctx.timing.write = Date.now() - start;
+    spinner.succeed(`Written ${result.files.length} files`);
+
+    return result;
+  } catch (error) {
+    spinner.fail('Failed to write output');
+    throw error;
+  }
+}
+
+/**
+ * Download assets with logging for failures (graceful degradation)
+ */
+async function downloadAssetsWithLogging(
+  assets: ExtractedElement['assets'],
+  outputDir: string
+): Promise<OutputResult['assets']> {
+  try {
+    const downloaded = await downloadAssets(assets, outputDir);
+    const successCount = downloaded.length;
+    const failCount = assets.length - successCount;
+
+    if (failCount > 0) {
+      logWarn(`Downloaded ${successCount}/${assets.length} assets (${failCount} failed)`);
+    } else {
+      logVerbose(`Downloaded ${downloaded.length} assets`);
+    }
+
+    return downloaded;
+  } catch (error) {
+    // Catch any unexpected errors from the download process
+    logWarn(`Asset download failed: ${error instanceof Error ? error.message : String(error)}`);
+    return [];
+  }
+}
+
+// ============================================================================
+// Error Helpers
+// ============================================================================
+
+/**
+ * Wrap errors from LLM operations with specific error types
+ */
+function wrapLLMError(error: unknown): Error {
+  // Already a SnatchError, preserve it
+  if (isSnatchError(error)) {
+    return error;
+  }
+
+  // Generic Error - wrap based on message content
+  if (error instanceof Error) {
+    const message = error.message.toLowerCase();
+
+    if (message.includes('timeout') || message.includes('timed out')) {
+      return new LLMTimeoutError(120000, error.message);
+    }
+    if (message.includes('not available') || message.includes('not installed') || message.includes('not authenticated')) {
+      return new LLMNotAvailableError(error.message);
+    }
+
+    return new LLMError(error.message, error);
+  }
+
+  return new LLMError(String(error));
+}
+
+// ============================================================================
+// Main Orchestrator
+// ============================================================================
 
 /**
  * Run the full extraction pipeline
@@ -45,145 +361,34 @@ export async function orchestrate(options: SnatchOptions): Promise<PipelineResul
   // Set verbose mode
   setVerbose(options.verbose ?? false);
 
-  // Initialize components
-  const browser = new BrowserManager({ headless: !options.interactive });
-  const llm = new LLMClient();
-  const output = new OutputWriter({ baseDir: options.outputDir });
-
-  let snapshot: PageSnapshot | undefined;
-  let selector: string | undefined;
-  let extracted: ExtractedElement | undefined;
-  let transformed: TransformResult | undefined;
-  let result: OutputResult | undefined;
+  // Initialize context
+  const ctx: StageContext = {
+    options,
+    browser: new BrowserManager({ headless: !options.interactive }),
+    llm: new LLMClient(),
+    output: new OutputWriter({ baseDir: options.outputDir }),
+    timing,
+  };
 
   try {
-    // =========================================================================
-    // Step 1: Browse
-    // =========================================================================
-    const browseSpinner = createSpinner('Launching browser...');
-    browseSpinner.start();
-    const browseStart = Date.now();
+    // Stage 1: Browse
+    const { page } = await browseAndNavigate(ctx);
 
-    const url = normalizeUrl(options.url);
-    await browser.launch();
-    await browser.navigate(url);
-    logVerbose(`Navigated to: ${url}`);
+    // Stage 2: Locate
+    const { selector } = await locateTargetElement(ctx, page);
 
-    timing.browse = Date.now() - browseStart;
-    browseSpinner.succeed(`Navigated to ${new URL(url).hostname}`);
+    // Stage 3: Extract
+    const extracted = await extractFromElement(ctx, page, selector);
 
-    // =========================================================================
-    // Step 2: Locate Element
-    // =========================================================================
-    const locateSpinner = createSpinner('Locating element...');
-    locateSpinner.start();
-    const locateStart = Date.now();
-
-    const page = browser.getPage();
-
-    if (options.selector) {
-      // Direct selector provided
-      selector = options.selector;
-      logVerbose(`Using selector: ${selector}`);
-    } else if (options.find) {
-      // Natural language - need snapshot and LLM
-      snapshot = await createAccessibilitySnapshot(page);
-      logVerbose(`Accessibility tree has ${snapshot.tree.length} root nodes`);
-
-      const locateResult = await locateElement(llm, {
-        snapshot,
-        query: options.find,
-      });
-
-      logVerbose(`Found element: ${locateResult.ref} (confidence: ${locateResult.confidence})`);
-
-      // Resolve ref to selector
-      selector = (await resolveRefToSelector(page, locateResult.ref)) ?? undefined;
-      if (!selector) {
-        throw new Error(`Could not resolve element reference: ${locateResult.ref}`);
-      }
-    } else if (options.interactive) {
-      // Interactive mode - launch visual picker
-      locateSpinner.text = 'Waiting for element selection...';
-      const pickerResult = await browser.launchInteractivePicker();
-      selector = pickerResult.selector;
-      logVerbose(`User selected: <${pickerResult.tagName}> "${pickerResult.textPreview}"`);
-      logVerbose(`Selector: ${selector}`);
-    } else {
-      throw new Error('Either --selector, --find, or --interactive is required');
-    }
-
-    timing.locate = Date.now() - locateStart;
-    locateSpinner.succeed(`Located element: ${selector}`);
-
-    // =========================================================================
-    // Step 3: Extract
-    // =========================================================================
-    const extractSpinner = createSpinner('Extracting HTML and styles...');
-    extractSpinner.start();
-    const extractStart = Date.now();
-
-    extracted = await extractElement(page, selector);
-
-    const originalSize = extracted.html.length + (extracted.css?.length || 0);
-    logVerbose(`Extracted ${extracted.html.length} bytes HTML, ${extracted.css?.length || 0} bytes CSS`);
-    logVerbose(`Found ${extracted.assets.length} assets`);
-
-    timing.extract = Date.now() - extractStart;
-    extractSpinner.succeed(
-      `Extracted (${formatBytes(originalSize)} → ${formatBytes(extracted.html.length + extracted.css.length)})`
-    );
-
-    // =========================================================================
-    // Step 4: Transform
-    // =========================================================================
-    const transformSpinner = createSpinner(
-      `Transforming to ${options.framework} + ${options.styling}...`
-    );
-    transformSpinner.start();
-    const transformStart = Date.now();
-
+    // Stage 4: Transform
     const componentName =
       options.componentName || generateComponentName(options.find || options.selector || 'Component');
+    const transformed = await transformToFramework(ctx, extracted, componentName);
 
-    transformed = await transformToComponent(llm, {
-      html: extracted.html,
-      css: extracted.css,
-      framework: options.framework,
-      styling: options.styling,
-      componentName,
-    });
+    // Stage 5: Write
+    const result = await writeOutput(ctx, componentName, transformed, extracted);
 
-    logVerbose(`Generated ${transformed.code.length} bytes of code`);
-    if (transformed.tokens) {
-      logVerbose(`Tokens used: ${transformed.tokens.total}`);
-    }
-
-    timing.transform = Date.now() - transformStart;
-    transformSpinner.succeed(`Transformed to ${options.framework}`);
-
-    // =========================================================================
-    // Step 5: Write Output
-    // =========================================================================
-    const writeSpinner = createSpinner('Writing files...');
-    writeSpinner.start();
-    const writeStart = Date.now();
-
-    result = await output.write(componentName, transformed);
-
-    // Download assets if requested
-    if (options.includeAssets && extracted.assets.length > 0) {
-      const downloaded = await downloadAssets(extracted.assets, options.outputDir);
-      result.assets = downloaded;
-      logVerbose(`Downloaded ${downloaded.length} assets`);
-    }
-
-    timing.write = Date.now() - writeStart;
-    writeSpinner.succeed(`Written ${result.files.length} files`);
-
-    // =========================================================================
     // Summary
-    // =========================================================================
     timing.total = Date.now() - totalStart;
 
     logSummary({
@@ -201,7 +406,8 @@ export async function orchestrate(options: SnatchOptions): Promise<PipelineResul
   } catch (error) {
     timing.total = Date.now() - totalStart;
 
-    logError(error instanceof Error ? error.message : String(error));
+    // Use formatError for better error display
+    logError(isSnatchError(error) ? formatError(error) : (error instanceof Error ? error.message : String(error)));
 
     return {
       success: false,
@@ -209,7 +415,13 @@ export async function orchestrate(options: SnatchOptions): Promise<PipelineResul
       timing,
     };
   } finally {
-    await browser.close();
+    // Ensure browser cleanup happens even if close() throws
+    try {
+      await ctx.browser.close();
+    } catch (closeError) {
+      // Log but don't rethrow - primary error (if any) takes precedence
+      logWarn(`Browser cleanup failed: ${closeError instanceof Error ? closeError.message : String(closeError)}`);
+    }
   }
 }
 

@@ -25,6 +25,16 @@ export class BrowserManager {
   }
 
   /**
+   * Ensure page exists or throw
+   */
+  private ensurePage(): Page {
+    if (!this.page) {
+      throw new Error('Browser not launched. Call launch() first.');
+    }
+    return this.page;
+  }
+
+  /**
    * Launch browser and create page
    */
   async launch(): Promise<Page> {
@@ -47,40 +57,32 @@ export class BrowserManager {
    * Navigate to URL and wait for load
    */
   async navigate(url: string): Promise<void> {
-    if (!this.page) {
-      throw new Error('Browser not launched. Call launch() first.');
-    }
-
-    await this.page.goto(url, { waitUntil: 'networkidle' });
+    const page = this.ensurePage();
+    await page.goto(url, { waitUntil: 'networkidle' });
   }
 
   /**
    * Get current page instance
    */
   getPage(): Page {
-    if (!this.page) {
-      throw new Error('Browser not launched. Call launch() first.');
-    }
-    return this.page;
+    return this.ensurePage();
   }
 
   /**
    * Take screenshot of page or element
    */
   async screenshot(selector?: string): Promise<Buffer> {
-    if (!this.page) {
-      throw new Error('Browser not launched. Call launch() first.');
-    }
+    const page = this.ensurePage();
 
     if (selector) {
-      const element = await this.page.$(selector);
+      const element = await page.$(selector);
       if (!element) {
         throw new Error(`Element not found: ${selector}`);
       }
       return element.screenshot();
     }
 
-    return this.page.screenshot({ fullPage: true });
+    return page.screenshot({ fullPage: true });
   }
 
   /**
@@ -99,10 +101,8 @@ export class BrowserManager {
    * Set viewport size
    */
   async setViewport(viewport: Viewport): Promise<void> {
-    if (!this.page) {
-      throw new Error('Browser not launched. Call launch() first.');
-    }
-    await this.page.setViewportSize(viewport);
+    const page = this.ensurePage();
+    await page.setViewportSize(viewport);
   }
 
   /**
@@ -112,9 +112,7 @@ export class BrowserManager {
    * select an element by clicking. Returns the CSS selector.
    */
   async launchInteractivePicker(): Promise<PickerResult> {
-    if (!this.page) {
-      throw new Error('Browser not launched. Call launch() first.');
-    }
-    return launchPicker(this.page);
+    const page = this.ensurePage();
+    return launchPicker(page);
   }
 }

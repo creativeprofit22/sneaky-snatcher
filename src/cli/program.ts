@@ -5,8 +5,8 @@
  */
 
 import { Command } from 'commander';
-import type { SnatchOptions, Framework, Styling } from '../types/index.ts';
-import { validateOptions } from './options.ts';
+import type { SnatchOptions } from '../types/index.ts';
+import { validateOptions, parseOptions } from './options.ts';
 import { logError, logInfo } from './logger.ts';
 import { orchestrate } from '../orchestrator.ts';
 
@@ -68,17 +68,19 @@ export function createProgram(): Command {
  * Run the snatch command
  */
 async function runSnatch(url: string, rawOptions: Record<string, unknown>): Promise<void> {
+  const parsed = parseOptions({ ...rawOptions, url });
+
   const options: SnatchOptions = {
-    url,
-    selector: rawOptions.selector as string | undefined,
-    find: rawOptions.find as string | undefined,
-    framework: (rawOptions.framework as Framework) || 'react',
-    styling: (rawOptions.styling as Styling) || 'tailwind',
-    outputDir: (rawOptions.output as string) || './components',
-    componentName: rawOptions.name as string | undefined,
-    interactive: Boolean(rawOptions.interactive),
-    includeAssets: Boolean(rawOptions.assets),
-    verbose: Boolean(rawOptions.verbose),
+    url: parsed.url || url,
+    selector: parsed.selector,
+    find: parsed.find,
+    framework: parsed.framework || 'react',
+    styling: parsed.styling || 'tailwind',
+    outputDir: parsed.outputDir || './components',
+    componentName: parsed.componentName,
+    interactive: parsed.interactive || false,
+    includeAssets: parsed.includeAssets || false,
+    verbose: parsed.verbose || false,
   };
 
   // Validate options

@@ -5,9 +5,34 @@
  */
 
 import type { LLMConfig, TokenUsage } from '../types/index.ts';
-// @ts-ignore - subclaude has no type declarations
 import { askClaude, checkClaude } from 'subclaude';
 import { LLMError, LLMNotAvailableError, LLMTimeoutError } from '../errors/index.ts';
+
+// Type declarations for subclaude (untyped library)
+interface SubclaudeFullResponse {
+  result: string;
+  usage?: { input_tokens: number; output_tokens: number };
+  total_cost_usd: number;
+}
+
+function isSubclaudeFullResponse(value: unknown): value is SubclaudeFullResponse {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'result' in value &&
+    typeof (value as SubclaudeFullResponse).result === 'string'
+  );
+}
+
+// Error code patterns for subclaude errors (more robust than string matching)
+const ERROR_PATTERNS = {
+  notAvailable: [/CLI_NOT_FOUND/i, /NOT_AUTHENTICATED/i, /ENOENT.*claude/i],
+  timeout: [/TIMEOUT/i, /ETIMEDOUT/i, /timed?\s*out/i],
+} as const;
+
+function matchesErrorPattern(message: string, patterns: readonly RegExp[]): boolean {
+  return patterns.some((pattern) => pattern.test(message));
+}
 
 const DEFAULT_CONFIG: LLMConfig = {
   model: 'sonnet',
@@ -39,33 +64,37 @@ export class LLMClient {
       });
 
       // fullResponse: true returns object with result and usage
-      const fullResponse = response as {
-        result: string;
-        usage?: { input_tokens: number; output_tokens: number };
-        total_cost_usd: number;
-      };
+      if (!isSubclaudeFullResponse(response)) {
+        throw new LLMError('Unexpected response format from Claude API');
+      }
 
       return {
-        content: fullResponse.result,
-        tokens: fullResponse.usage
+        content: response.result,
+        tokens: response.usage
           ? {
-              input: fullResponse.usage.input_tokens,
-              output: fullResponse.usage.output_tokens,
-              total: fullResponse.usage.input_tokens + fullResponse.usage.output_tokens,
+              input: response.usage.input_tokens,
+              output: response.usage.output_tokens,
+              total: response.usage.input_tokens + response.usage.output_tokens,
             }
           : undefined,
       };
     } catch (error) {
-      // Handle error - subclaude's ClaudeError extends Error
+      // Re-throw our own errors as-is
+      if (error instanceof LLMError) {
+        throw error;
+      }
+
+      // Handle subclaude errors using pattern matching
       if (error instanceof Error) {
-        // Map subclaude errors to our error classes based on message content
-        if (error.message.includes('CLI_NOT_FOUND') || error.message.includes('NOT_AUTHENTICATED')) {
-          throw new LLMNotAvailableError(error.message);
+        const message = error.message;
+
+        if (matchesErrorPattern(message, ERROR_PATTERNS.notAvailable)) {
+          throw new LLMNotAvailableError(message);
         }
-        if (error.message.includes('TIMEOUT')) {
-          throw new LLMTimeoutError(this.config.timeout, error.message);
+        if (matchesErrorPattern(message, ERROR_PATTERNS.timeout)) {
+          throw new LLMTimeoutError(this.config.timeout, message);
         }
-        throw new LLMError(error.message, error);
+        throw new LLMError(message, error);
       }
       throw new LLMError(String(error));
     }

@@ -6,7 +6,100 @@
 
 import path from 'node:path';
 import fs from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import type { Asset, DownloadedAsset } from '../types/index.ts';
+
+/**
+ * Single source of truth for extension-to-type mappings
+ */
+const EXTENSION_TYPE_MAP: Record<string, Asset['type']> = {
+  // Images
+  '.png': 'image',
+  '.jpg': 'image',
+  '.jpeg': 'image',
+  '.gif': 'image',
+  '.webp': 'image',
+  '.avif': 'image',
+  // Icons
+  '.svg': 'icon',
+  '.ico': 'icon',
+  // Fonts
+  '.woff': 'font',
+  '.woff2': 'font',
+  '.ttf': 'font',
+  '.otf': 'font',
+  '.eot': 'font',
+};
+
+/**
+ * Default extensions for each asset type (for URL fallback)
+ */
+const DEFAULT_EXTENSIONS: Record<Asset['type'], string> = {
+  image: 'png',
+  icon: 'svg',
+  font: 'woff2',
+  background: 'png',
+};
+
+/** Valid MIME type prefixes for data URLs */
+const VALID_DATA_URL_MIME_PREFIXES = [
+  'image/',
+  'font/',
+  'application/font',
+  'application/x-font',
+  'application/octet-stream',
+] as const;
+
+/**
+ * Validate data URL has proper mime type prefix
+ */
+function validateDataUrlMimeType(url: string): boolean {
+  const mimeMatch = url.match(/^data:([^;,]+)/);
+  if (!mimeMatch?.[1]) {
+    return false;
+  }
+  const mimeType = mimeMatch[1].toLowerCase();
+  return VALID_DATA_URL_MIME_PREFIXES.some((prefix) => mimeType.startsWith(prefix));
+}
+
+/**
+ * Sanitize filename for filesystem
+ */
+function sanitizeFilename(filename: string): string {
+  return filename
+    .replace(/[^a-zA-Z0-9.-]/g, '-')
+    .replace(/-+/g, '-')
+    .toLowerCase();
+}
+
+/**
+ * Extract filename from URL (consolidated source of truth)
+ */
+export function extractFilenameFromUrl(url: string, assetType?: Asset['type']): string {
+  // Handle data URLs
+  if (url.startsWith('data:')) {
+    const mimeMatch = url.match(/data:([^;,]+)/);
+    const ext = mimeMatch?.[1]?.split('/')[1] || 'bin';
+    return `asset-${Date.now()}.${ext}`;
+  }
+
+  // Parse URL and extract filename
+  try {
+    const urlObj = new URL(url);
+    const pathname = urlObj.pathname;
+    const basename = pathname.split('/').pop();
+
+    if (basename && basename.includes('.')) {
+      return sanitizeFilename(basename);
+    }
+
+    // Fallback with type-based extension (using consolidated mapping)
+    const ext = assetType ? DEFAULT_EXTENSIONS[assetType] : 'png';
+    return `${basename || 'asset'}-${Date.now()}.${ext}`;
+  } catch {
+    return `asset-${Date.now()}.png`;
+  }
+}
 
 /**
  * Download all assets to output directory
@@ -34,20 +127,57 @@ export async function downloadAssets(
 }
 
 /**
+ * Write file atomically to avoid race conditions on collision
+ * Writes to temp file first, then renames
+ */
+async function atomicWriteFile(targetPath: string, data: Buffer): Promise<string> {
+  const dir = path.dirname(targetPath);
+  const ext = path.extname(targetPath);
+  const base = path.basename(targetPath, ext);
+
+  // Check if file exists, append UUID if collision
+  let finalPath = targetPath;
+  try {
+    await fs.access(targetPath);
+    // File exists, create unique name
+    finalPath = path.join(dir, `${base}-${randomUUID().slice(0, 8)}${ext}`);
+  } catch {
+    // File doesn't exist, use original path
+  }
+
+  // Write to temp file first, then rename (atomic on most filesystems)
+  const tempPath = path.join(dir, `.tmp-${randomUUID()}`);
+  await fs.writeFile(tempPath, data);
+  await fs.rename(tempPath, finalPath);
+
+  return finalPath;
+}
+
+/**
  * Download single asset
  */
 async function downloadSingleAsset(asset: Asset, outputDir: string): Promise<DownloadedAsset> {
-  const filename = asset.filename || generateFilename(asset.url, asset.type);
-  const localPath = path.join(outputDir, filename);
+  const filename = asset.filename || extractFilenameFromUrl(asset.url, asset.type);
+  const targetPath = path.join(outputDir, filename);
 
   // Handle data URLs
   if (asset.url.startsWith('data:')) {
+    // Validate mime type
+    if (!validateDataUrlMimeType(asset.url)) {
+      throw new Error(`Invalid data URL for ${filename}: missing or unsupported mime type`);
+    }
+
     const base64Data = asset.url.split(',')[1];
     if (!base64Data) {
-      throw new Error('Invalid data URL');
+      throw new Error(`Invalid data URL for ${filename}: missing base64 data`);
     }
     const buffer = Buffer.from(base64Data, 'base64');
-    await fs.writeFile(localPath, buffer);
+    let localPath: string;
+    try {
+      localPath = await atomicWriteFile(targetPath, buffer);
+    } catch (writeError) {
+      throw new Error(`Failed to write data URL asset ${filename}: ${writeError instanceof Error ? writeError.message : String(writeError)}`);
+    }
     return {
       originalUrl: asset.url,
       localPath,
@@ -56,13 +186,23 @@ async function downloadSingleAsset(asset: Asset, outputDir: string): Promise<Dow
   }
 
   // Download from URL
-  const response = await fetch(asset.url);
+  let response: Response;
+  try {
+    response = await fetch(asset.url);
+  } catch (fetchError) {
+    throw new Error(`Failed to fetch asset ${asset.url}: ${fetchError instanceof Error ? fetchError.message : String(fetchError)}`);
+  }
   if (!response.ok) {
-    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    throw new Error(`HTTP ${response.status} ${response.statusText} for URL: ${asset.url}`);
   }
 
   const buffer = Buffer.from(await response.arrayBuffer());
-  await fs.writeFile(localPath, buffer);
+  let localPath: string;
+  try {
+    localPath = await atomicWriteFile(targetPath, buffer);
+  } catch (writeError) {
+    throw new Error(`Failed to write asset ${filename}: ${writeError instanceof Error ? writeError.message : String(writeError)}`);
+  }
 
   return {
     originalUrl: asset.url,
@@ -72,48 +212,20 @@ async function downloadSingleAsset(asset: Asset, outputDir: string): Promise<Dow
 }
 
 /**
- * Generate filename for asset
- */
-function generateFilename(url: string, type: Asset['type']): string {
-  const extensions: Record<Asset['type'], string> = {
-    image: 'png',
-    icon: 'svg',
-    font: 'woff2',
-    background: 'png',
-  };
-
-  try {
-    const urlObj = new URL(url);
-    const pathname = urlObj.pathname;
-    const basename = pathname.split('/').pop();
-
-    if (basename && basename.includes('.')) {
-      return sanitizeFilename(basename);
-    }
-  } catch {
-    // Invalid URL, use fallback
-  }
-
-  return `${type}-${Date.now()}.${extensions[type]}`;
-}
-
-/**
- * Sanitize filename for filesystem
- */
-function sanitizeFilename(filename: string): string {
-  return filename
-    .replace(/[^a-zA-Z0-9.-]/g, '-')
-    .replace(/-+/g, '-')
-    .toLowerCase();
-}
-
-/**
  * Organize assets by type
  */
 export async function organizeAssets(
   assets: DownloadedAsset[],
   outputDir: string
 ): Promise<Map<Asset['type'], string[]>> {
+  // Input validation
+  if (!Array.isArray(assets)) {
+    throw new Error('organizeAssets: assets must be an array');
+  }
+  if (typeof outputDir !== 'string' || outputDir.trim() === '') {
+    throw new Error('organizeAssets: outputDir must be a non-empty string');
+  }
+
   const organized = new Map<Asset['type'], string[]>();
   const types: Asset['type'][] = ['image', 'icon', 'font', 'background'];
 
@@ -124,30 +236,31 @@ export async function organizeAssets(
   }
 
   for (const asset of assets) {
+    // Validate each asset has required localPath
+    if (!asset?.localPath || typeof asset.localPath !== 'string') {
+      console.warn('Skipping invalid asset: missing localPath');
+      continue;
+    }
+
     const type = detectAssetType(asset.localPath);
     const typeDir = path.join(outputDir, 'assets', type + 's');
     const newPath = path.join(typeDir, path.basename(asset.localPath));
 
-    await fs.rename(asset.localPath, newPath);
-    organized.get(type)?.push(newPath);
+    try {
+      await fs.rename(asset.localPath, newPath);
+      organized.get(type)?.push(newPath);
+    } catch (error) {
+      console.warn(`Failed to organize asset ${asset.localPath}:`, error);
+    }
   }
 
   return organized;
 }
 
 /**
- * Detect asset type from path/extension
+ * Detect asset type from path/extension (uses consolidated EXTENSION_TYPE_MAP)
  */
 function detectAssetType(filepath: string): Asset['type'] {
   const ext = path.extname(filepath).toLowerCase();
-
-  const imageExts = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.avif'];
-  const iconExts = ['.svg', '.ico'];
-  const fontExts = ['.woff', '.woff2', '.ttf', '.otf', '.eot'];
-
-  if (imageExts.includes(ext)) return 'image';
-  if (iconExts.includes(ext)) return 'icon';
-  if (fontExts.includes(ext)) return 'font';
-
-  return 'image'; // Default
+  return EXTENSION_TYPE_MAP[ext] || 'image';
 }

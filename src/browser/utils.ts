@@ -6,6 +6,12 @@
 
 import type { Page } from 'playwright';
 
+/** Time to wait for lazy-loaded content after page load (ms) */
+const LAZY_CONTENT_WAIT_MS = 500;
+
+/** Time to wait for scroll animation to complete (ms) */
+const SCROLL_ANIMATION_WAIT_MS = 300;
+
 /**
  * Wait for page to be fully ready (network idle + DOM stable)
  */
@@ -16,7 +22,7 @@ export async function waitForPageReady(page: Page, timeout = 10000): Promise<voi
   ]);
 
   // Additional wait for any lazy-loaded content
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(LAZY_CONTENT_WAIT_MS);
 }
 
 /**
@@ -31,45 +37,6 @@ export async function scrollToElement(page: Page, selector: string): Promise<voi
   }, selector);
 
   // Wait for scroll to complete
-  await page.waitForTimeout(300);
+  await page.waitForTimeout(SCROLL_ANIMATION_WAIT_MS);
 }
 
-/**
- * Get element bounding box
- */
-export async function getElementBounds(
-  page: Page,
-  selector: string
-): Promise<{ x: number; y: number; width: number; height: number } | null> {
-  const element = await page.$(selector);
-  if (!element) return null;
-
-  const box = await element.boundingBox();
-  return box;
-}
-
-/**
- * Check if element is visible in viewport
- */
-export async function isElementVisible(page: Page, selector: string): Promise<boolean> {
-  const element = await page.$(selector);
-  if (!element) return false;
-
-  return element.isVisible();
-}
-
-/**
- * Wait for element to appear
- */
-export async function waitForElement(
-  page: Page,
-  selector: string,
-  timeout = 5000
-): Promise<boolean> {
-  try {
-    await page.waitForSelector(selector, { timeout, state: 'visible' });
-    return true;
-  } catch {
-    return false;
-  }
-}

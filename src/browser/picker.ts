@@ -8,6 +8,9 @@
  */
 
 import type { Page } from 'playwright';
+// Note: Selector helpers are duplicated in page.evaluate() below because browser
+// context cannot import Node.js modules. See selectorUtils.ts for the canonical
+// implementation that can be used in Node.js code.
 
 /**
  * Result from the interactive picker
@@ -98,34 +101,57 @@ export async function launchPicker(page: Page): Promise<PickerResult> {
     document.body.appendChild(banner);
 
     let currentElement: Element | null = null;
+    let mouseMoveTimeout: ReturnType<typeof setTimeout> | null = null;
+    const MOUSEMOVE_DEBOUNCE_MS = 16; // ~60fps debounce for selector generation
+    const MAX_SELECTOR_PATH_DEPTH = 5; // Maximum ancestor levels to traverse for path selector
+    const MAX_CLASS_NAME_LENGTH = 30; // Skip overly long class names (likely generated/hashed)
 
     /**
-     * Generate a unique CSS selector for an element
+     * Check if an ID/class is from the picker UI (should be ignored)
      */
-    function generateSelector(el: Element): string {
-      // Try ID first (most specific)
-      if (el.id && !el.id.startsWith('__sneaky')) {
-        const idSelector = `#${CSS.escape(el.id)}`;
-        if (document.querySelectorAll(idSelector).length === 1) {
-          return idSelector;
-        }
-      }
+    function isPickerElement(name: string): boolean {
+      return name.startsWith('__sneaky');
+    }
 
-      // Try unique class combination
-      if (el.classList.length > 0) {
-        const classes = Array.from(el.classList)
-          .filter((c) => !c.startsWith('__sneaky'))
-          .map((c) => `.${CSS.escape(c)}`)
-          .join('');
-        if (classes) {
-          const classSelector = `${el.tagName.toLowerCase()}${classes}`;
-          if (document.querySelectorAll(classSelector).length === 1) {
-            return classSelector;
-          }
-        }
+    /**
+     * Try to generate a selector using the element's ID
+     */
+    function tryIdSelector(el: Element): string | null {
+      if (!el.id || isPickerElement(el.id)) {
+        return null;
       }
+      const idSelector = `#${CSS.escape(el.id)}`;
+      if (document.querySelectorAll(idSelector).length === 1) {
+        return idSelector;
+      }
+      return null;
+    }
 
-      // Try data attributes
+    /**
+     * Try to generate a selector using the element's class combination
+     */
+    function tryClassSelector(el: Element): string | null {
+      if (el.classList.length === 0) {
+        return null;
+      }
+      const classes = Array.from(el.classList)
+        .filter((c) => !isPickerElement(c))
+        .map((c) => `.${CSS.escape(c)}`)
+        .join('');
+      if (!classes) {
+        return null;
+      }
+      const classSelector = `${el.tagName.toLowerCase()}${classes}`;
+      if (document.querySelectorAll(classSelector).length === 1) {
+        return classSelector;
+      }
+      return null;
+    }
+
+    /**
+     * Try to generate a selector using data attributes
+     */
+    function tryDataAttributes(el: Element): string | null {
       for (const attr of Array.from(el.attributes)) {
         if (attr.name.startsWith('data-') && attr.value) {
           const dataSelector = `[${attr.name}="${CSS.escape(attr.value)}"]`;
@@ -134,18 +160,37 @@ export async function launchPicker(page: Page): Promise<PickerResult> {
           }
         }
       }
+      return null;
+    }
 
-      // Build path from root with nth-child
+    /**
+     * Try to generate a selector using aria-label
+     */
+    function tryAriaLabel(el: Element): string | null {
+      const ariaLabel = el.getAttribute('aria-label');
+      if (ariaLabel) {
+        const ariaSelector = `[aria-label="${CSS.escape(ariaLabel)}"]`;
+        if (document.querySelectorAll(ariaSelector).length === 1) {
+          return ariaSelector;
+        }
+      }
+      return null;
+    }
+
+    /**
+     * Build a path selector with nth-of-type for disambiguation
+     */
+    function buildPathSelector(el: Element): string {
       const path: string[] = [];
       let current: Element | null = el;
 
-      while (current && current !== document.body && path.length < 5) {
+      while (current && current !== document.body && path.length < MAX_SELECTOR_PATH_DEPTH) {
         let selector = current.tagName.toLowerCase();
 
         // Add distinguishing class if available
         if (current.classList.length > 0) {
           const mainClass = Array.from(current.classList).find(
-            (c) => !c.startsWith('__sneaky') && c.length < 30
+            (c) => !isPickerElement(c) && c.length < MAX_CLASS_NAME_LENGTH
           );
           if (mainClass) {
             selector += `.${CSS.escape(mainClass)}`;
@@ -158,7 +203,7 @@ export async function launchPicker(page: Page): Promise<PickerResult> {
           return partialPath;
         }
 
-        // Add nth-child for disambiguation
+        // Add nth-of-type for disambiguation
         const parent = current.parentElement;
         if (parent) {
           const siblings = Array.from(parent.children).filter(
@@ -178,10 +223,41 @@ export async function launchPicker(page: Page): Promise<PickerResult> {
     }
 
     /**
+     * Generate a unique CSS selector for an element
+     * Orchestrates the various selector strategies
+     */
+    function generateSelector(el: Element): string {
+      // Try ID first (most specific)
+      const idSel = tryIdSelector(el);
+      if (idSel) return idSel;
+
+      // Try unique class combination
+      const classSel = tryClassSelector(el);
+      if (classSel) return classSel;
+
+      // Try data attributes
+      const dataSel = tryDataAttributes(el);
+      if (dataSel) return dataSel;
+
+      // Try aria-label
+      const ariaSel = tryAriaLabel(el);
+      if (ariaSel) return ariaSel;
+
+      // Fall back to path selector
+      return buildPathSelector(el);
+    }
+
+    /**
      * Handle mouse movement - highlight element under cursor
+     * Overlay positioning is immediate, selector generation is debounced
      */
     function handleMouseMove(e: MouseEvent) {
-      const target = e.target as Element;
+      const target = e.target;
+
+      // Type guard: ensure target is an Element
+      if (!(target instanceof Element)) {
+        return;
+      }
 
       // Ignore picker UI elements
       if (target.id?.startsWith('__sneaky')) {
@@ -192,15 +268,14 @@ export async function launchPicker(page: Page): Promise<PickerResult> {
         currentElement = target;
         const rect = target.getBoundingClientRect();
 
-        // Position overlay
+        // Position overlay immediately (visual feedback)
         overlay.style.display = 'block';
         overlay.style.top = `${rect.top}px`;
         overlay.style.left = `${rect.left}px`;
         overlay.style.width = `${rect.width}px`;
         overlay.style.height = `${rect.height}px`;
 
-        // Generate and display selector preview
-        const selector = generateSelector(target);
+        // Position tooltip immediately with basic info
         const tagName = target.tagName.toLowerCase();
         const classPreview =
           target.classList.length > 0
@@ -209,7 +284,7 @@ export async function launchPicker(page: Page): Promise<PickerResult> {
 
         tooltip.innerHTML = `
           <div style="color: #60a5fa; font-weight: bold;">&lt;${tagName}${classPreview}&gt;</div>
-          <div style="margin-top: 4px; opacity: 0.8; font-size: 11px; word-break: break-all;">${selector}</div>
+          <div style="margin-top: 4px; opacity: 0.8; font-size: 11px; word-break: break-all;">...</div>
         `;
         tooltip.style.display = 'block';
 
@@ -221,6 +296,20 @@ export async function launchPicker(page: Page): Promise<PickerResult> {
           tooltip.style.top = `${rect.bottom + 8}px`;
         }
         tooltip.style.left = `${Math.max(10, Math.min(rect.left, window.innerWidth - 420))}px`;
+
+        // Debounce the expensive selector generation (4 querySelectorAll calls)
+        if (mouseMoveTimeout) {
+          clearTimeout(mouseMoveTimeout);
+        }
+        mouseMoveTimeout = setTimeout(() => {
+          if (currentElement === target) {
+            const selector = generateSelector(target);
+            tooltip.innerHTML = `
+              <div style="color: #60a5fa; font-weight: bold;">&lt;${tagName}${classPreview}&gt;</div>
+              <div style="margin-top: 4px; opacity: 0.8; font-size: 11px; word-break: break-all;">${selector}</div>
+            `;
+          }
+        }, MOUSEMOVE_DEBOUNCE_MS);
       }
     }
 
@@ -231,26 +320,34 @@ export async function launchPicker(page: Page): Promise<PickerResult> {
       e.preventDefault();
       e.stopPropagation();
 
-      const target = e.target as Element;
+      const target = e.target;
+
+      // Type guard: ensure target is an Element
+      if (!(target instanceof Element)) {
+        return;
+      }
+
       if (target.id?.startsWith('__sneaky')) {
         return;
       }
 
-      const selector = generateSelector(target);
-      const tagName = target.tagName.toLowerCase();
-      const textContent = target.textContent || '';
-      const textPreview =
-        textContent.trim().slice(0, 50) + (textContent.length > 50 ? '...' : '');
+      try {
+        const selector = generateSelector(target);
+        const tagName = target.tagName.toLowerCase();
+        const textContent = target.textContent || '';
+        const textPreview =
+          textContent.trim().slice(0, 50) + (textContent.length > 50 ? '...' : '');
 
-      // Cleanup picker UI
-      cleanup();
-
-      // Send result back
-      (window as unknown as { __sneakySnatcherSelect: (r: unknown) => void }).__sneakySnatcherSelect({
-        selector,
-        tagName,
-        textPreview,
-      });
+        // Send result back
+        (window as unknown as { __sneakySnatcherSelect: (r: unknown) => void }).__sneakySnatcherSelect({
+          selector,
+          tagName,
+          textPreview,
+        });
+      } finally {
+        // Cleanup picker UI even on error
+        cleanup();
+      }
     }
 
     /**
@@ -271,6 +368,9 @@ export async function launchPicker(page: Page): Promise<PickerResult> {
      * Remove picker UI and event listeners
      */
     function cleanup() {
+      if (mouseMoveTimeout) {
+        clearTimeout(mouseMoveTimeout);
+      }
       overlay.remove();
       tooltip.remove();
       banner.remove();

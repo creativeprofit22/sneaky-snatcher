@@ -53,20 +53,30 @@ export async function updateIndex(indexPath: string, componentName: string): Pro
     return;
   }
 
-  // Find insertion point (keep alphabetical order)
+  // Simplified: split into header (comments/blank lines) and exports
   const lines = content.split('\n');
-  const exportLines = lines.filter((line) => line.startsWith('export * from'));
-  const otherLines = lines.filter((line) => !line.startsWith('export * from'));
+  const exportLines: string[] = [];
+  const headerLines: string[] = [];
 
+  for (const line of lines) {
+    if (line.startsWith('export * from')) {
+      exportLines.push(line);
+    } else if (line.trim().startsWith('/*') || line.trim().startsWith('*') || line.trim().startsWith('//') || line.trim() === '') {
+      // Only keep header lines before any exports
+      if (exportLines.length === 0) {
+        headerLines.push(line);
+      }
+    }
+  }
+
+  // Add new export and sort
   exportLines.push(exportLine);
   exportLines.sort();
 
-  const newContent = [
-    ...otherLines.filter((line) => line.trim() || otherLines.indexOf(line) < otherLines.length - 1),
-    '',
-    ...exportLines,
-    '',
-  ].join('\n');
+  // Rebuild: header + blank line + sorted exports + trailing newline
+  const header = headerLines.join('\n').trimEnd();
+  const exports = exportLines.join('\n');
+  const newContent = header + (header ? '\n\n' : '') + exports + '\n';
 
   await fs.writeFile(indexPath, newContent, 'utf-8');
 }
