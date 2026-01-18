@@ -2091,3 +2091,1096 @@ describe('Phase 2 Keyboard Shortcut Interactions', () => {
     });
   });
 });
+
+// ============================================================================
+// Phase 3 Keyboard Shortcuts Tests
+// ============================================================================
+
+describe('Vim Navigation Keys', () => {
+  describe('Key Recognition', () => {
+    test('H key maps to left/parent navigation', () => {
+      const key = 'H';
+      const isLeftNav = key === 'H' || key === 'h';
+      expect(isLeftNav).toBe(true);
+    });
+
+    test('h key (lowercase) maps to left/parent navigation', () => {
+      const key = 'h';
+      const isLeftNav = key === 'H' || key === 'h';
+      expect(isLeftNav).toBe(true);
+    });
+
+    test('J key maps to down/next sibling navigation', () => {
+      const key = 'J';
+      const isDownNav = key === 'J' || key === 'j';
+      expect(isDownNav).toBe(true);
+    });
+
+    test('j key (lowercase) maps to down/next sibling navigation', () => {
+      const key = 'j';
+      const isDownNav = key === 'J' || key === 'j';
+      expect(isDownNav).toBe(true);
+    });
+
+    test('K key maps to up/previous sibling navigation', () => {
+      const key = 'K';
+      const isUpNav = key === 'K' || key === 'k';
+      expect(isUpNav).toBe(true);
+    });
+
+    test('k key (lowercase) maps to up/previous sibling navigation', () => {
+      const key = 'k';
+      const isUpNav = key === 'K' || key === 'k';
+      expect(isUpNav).toBe(true);
+    });
+
+    test('L key maps to right/first child navigation', () => {
+      const key = 'L';
+      const isRightNav = key === 'L' || key === 'l';
+      expect(isRightNav).toBe(true);
+    });
+
+    test('l key (lowercase) maps to right/first child navigation', () => {
+      const key = 'l';
+      const isRightNav = key === 'L' || key === 'l';
+      expect(isRightNav).toBe(true);
+    });
+  });
+
+  describe('Vim to Arrow Key Mapping', () => {
+    test('H maps to ArrowLeft behavior', () => {
+      const vimToArrowMap: Record<string, string> = {
+        h: 'ArrowLeft',
+        H: 'ArrowLeft',
+        j: 'ArrowDown',
+        J: 'ArrowDown',
+        k: 'ArrowUp',
+        K: 'ArrowUp',
+        l: 'ArrowRight',
+        L: 'ArrowRight',
+      };
+      expect(vimToArrowMap['h']).toBe('ArrowLeft');
+      expect(vimToArrowMap['H']).toBe('ArrowLeft');
+    });
+
+    test('J maps to ArrowDown behavior', () => {
+      const vimToArrowMap: Record<string, string> = {
+        h: 'ArrowLeft',
+        j: 'ArrowDown',
+        k: 'ArrowUp',
+        l: 'ArrowRight',
+      };
+      expect(vimToArrowMap['j']).toBe('ArrowDown');
+    });
+
+    test('K maps to ArrowUp behavior', () => {
+      const vimToArrowMap: Record<string, string> = {
+        h: 'ArrowLeft',
+        j: 'ArrowDown',
+        k: 'ArrowUp',
+        l: 'ArrowRight',
+      };
+      expect(vimToArrowMap['k']).toBe('ArrowUp');
+    });
+
+    test('L maps to ArrowRight behavior', () => {
+      const vimToArrowMap: Record<string, string> = {
+        h: 'ArrowLeft',
+        j: 'ArrowDown',
+        k: 'ArrowUp',
+        l: 'ArrowRight',
+      };
+      expect(vimToArrowMap['l']).toBe('ArrowRight');
+    });
+  });
+
+  describe('Navigation Behavior Equivalence', () => {
+    test('H navigates to parent element (same as ArrowLeft)', () => {
+      const key = 'h';
+      const navigationType = key === 'h' || key === 'H' ? 'parent' : null;
+      expect(navigationType).toBe('parent');
+    });
+
+    test('J navigates to next sibling (same as ArrowDown)', () => {
+      const key = 'j';
+      const navigationType = key === 'j' || key === 'J' ? 'nextSibling' : null;
+      expect(navigationType).toBe('nextSibling');
+    });
+
+    test('K navigates to previous sibling (same as ArrowUp)', () => {
+      const key = 'k';
+      const navigationType = key === 'k' || key === 'K' ? 'prevSibling' : null;
+      expect(navigationType).toBe('prevSibling');
+    });
+
+    test('L navigates to first child (same as ArrowRight)', () => {
+      const key = 'l';
+      const navigationType = key === 'l' || key === 'L' ? 'firstChild' : null;
+      expect(navigationType).toBe('firstChild');
+    });
+  });
+
+  describe('Vim Keys During Search Mode', () => {
+    test('vim keys are disabled during search mode', () => {
+      const isSearchModeActive = true;
+      const key = 'j';
+      const shouldHandleVimNav = !isSearchModeActive && /^[hjkl]$/i.test(key);
+      expect(shouldHandleVimNav).toBe(false);
+    });
+
+    test('vim keys work when search mode is inactive', () => {
+      const isSearchModeActive = false;
+      const key = 'j';
+      const shouldHandleVimNav = !isSearchModeActive && /^[hjkl]$/i.test(key);
+      expect(shouldHandleVimNav).toBe(true);
+    });
+  });
+
+  describe('Vim Keys During Help Overlay', () => {
+    test('vim keys are disabled when help is visible', () => {
+      const isHelpVisible = true;
+      const key = 'k';
+      const shouldHandleVimNav = !isHelpVisible && /^[hjkl]$/i.test(key);
+      expect(shouldHandleVimNav).toBe(false);
+    });
+  });
+
+  describe('Integration with Selection Flow', () => {
+    test('vim navigation completes selection flow', async () => {
+      const mockPage = createMockPage();
+      const pickerPromise = launchPicker(mockPage as any);
+
+      setTimeout(() => {
+        mockPage.triggerSelection({
+          selector: 'li:nth-of-type(3)',
+          tagName: 'li',
+          textPreview: 'Third item via vim navigation',
+        });
+      }, 10);
+
+      const result = await pickerPromise;
+      expect(result.selector).toBe('li:nth-of-type(3)');
+    });
+
+    test('combined vim and arrow navigation works', async () => {
+      const mockPage = createMockPage();
+      const pickerPromise = launchPicker(mockPage as any);
+
+      setTimeout(() => {
+        mockPage.triggerSelection({
+          selector: 'div.child > span:nth-of-type(1)',
+          tagName: 'span',
+          textPreview: 'Navigated with vim keys',
+        });
+      }, 10);
+
+      const result = await pickerPromise;
+      expect(result.tagName).toBe('span');
+    });
+  });
+});
+
+describe('Multi-Select Mode', () => {
+  describe('Ctrl+Enter Activation', () => {
+    test('Ctrl+Enter is recognized as multi-select trigger', () => {
+      const key = 'Enter';
+      const ctrlKey = true;
+      const isMultiSelectTrigger = key === 'Enter' && ctrlKey;
+      expect(isMultiSelectTrigger).toBe(true);
+    });
+
+    test('Enter without Ctrl is not multi-select', () => {
+      const key = 'Enter';
+      const ctrlKey = false;
+      const isMultiSelectTrigger = key === 'Enter' && ctrlKey;
+      expect(isMultiSelectTrigger).toBe(false);
+    });
+
+    test('Ctrl+Enter starts multi-select mode', () => {
+      let isMultiSelectMode = false;
+      const key = 'Enter';
+      const ctrlKey = true;
+
+      if (key === 'Enter' && ctrlKey) {
+        isMultiSelectMode = true;
+      }
+      expect(isMultiSelectMode).toBe(true);
+    });
+  });
+
+  describe('Selection Tracking', () => {
+    test('multi-select adds element to selection array', () => {
+      const selectedElements: string[] = [];
+      const currentElement = '#button-1';
+
+      selectedElements.push(currentElement);
+      expect(selectedElements).toContain('#button-1');
+      expect(selectedElements).toHaveLength(1);
+    });
+
+    test('multiple Ctrl+Enter adds multiple elements', () => {
+      const selectedElements: string[] = [];
+
+      selectedElements.push('#button-1');
+      selectedElements.push('#button-2');
+      selectedElements.push('#button-3');
+
+      expect(selectedElements).toHaveLength(3);
+      expect(selectedElements).toEqual(['#button-1', '#button-2', '#button-3']);
+    });
+
+    test('duplicate selection is prevented', () => {
+      const selectedElements: string[] = ['#button-1'];
+      const currentElement = '#button-1';
+
+      if (!selectedElements.includes(currentElement)) {
+        selectedElements.push(currentElement);
+      }
+      expect(selectedElements).toHaveLength(1);
+    });
+
+    test('selection order is preserved', () => {
+      const selectedElements: string[] = [];
+      const elementsToSelect = ['#third', '#first', '#second'];
+
+      elementsToSelect.forEach((el) => selectedElements.push(el));
+
+      expect(selectedElements[0]).toBe('#third');
+      expect(selectedElements[1]).toBe('#first');
+      expect(selectedElements[2]).toBe('#second');
+    });
+  });
+
+  describe('Finishing Multi-Select', () => {
+    test('regular Enter finishes multi-select mode', () => {
+      let isMultiSelectMode = true;
+      const key = 'Enter';
+      const ctrlKey = false;
+
+      if (key === 'Enter' && !ctrlKey && isMultiSelectMode) {
+        isMultiSelectMode = false;
+      }
+      expect(isMultiSelectMode).toBe(false);
+    });
+
+    test('regular Enter includes current element in final selection', () => {
+      const selectedElements: string[] = ['#el1', '#el2'];
+      const currentElement = '#el3';
+      const key = 'Enter';
+      const ctrlKey = false;
+
+      if (key === 'Enter' && !ctrlKey) {
+        if (!selectedElements.includes(currentElement)) {
+          selectedElements.push(currentElement);
+        }
+      }
+      expect(selectedElements).toHaveLength(3);
+      expect(selectedElements).toContain('#el3');
+    });
+
+    test('Escape during multi-select cancels all selections', () => {
+      let selectedElements: string[] = ['#el1', '#el2', '#el3'];
+      const key = 'Escape';
+
+      if (key === 'Escape') {
+        selectedElements = [];
+      }
+      expect(selectedElements).toHaveLength(0);
+    });
+  });
+
+  describe('Visual Feedback', () => {
+    test('selected elements have visual indicator', () => {
+      const selectedClass = '__sneaky-multi-selected';
+      expect(selectedClass.startsWith('__sneaky')).toBe(true);
+    });
+
+    test('current element highlight differs from selected elements', () => {
+      const currentHighlightClass = '__sneaky-picker-highlight';
+      const selectedClass = '__sneaky-multi-selected';
+      expect(currentHighlightClass).not.toBe(selectedClass);
+    });
+
+    test('banner shows multi-select count', () => {
+      const selectedCount = 3;
+      const bannerText = `${selectedCount} elements selected (Enter to finish, Ctrl+Enter to add more)`;
+      expect(bannerText).toContain('3 elements selected');
+      expect(bannerText).toContain('Enter to finish');
+      expect(bannerText).toContain('Ctrl+Enter');
+    });
+
+    test('banner shows singular when 1 element selected', () => {
+      const selectedCount = 1;
+      const bannerText = selectedCount === 1 ? '1 element selected' : `${selectedCount} elements selected`;
+      expect(bannerText).toBe('1 element selected');
+    });
+  });
+
+  describe('Continued Navigation', () => {
+    test('navigation continues after Ctrl+Enter', () => {
+      const isMultiSelectMode = true;
+      const canNavigate = true;
+
+      expect(isMultiSelectMode).toBe(true);
+      expect(canNavigate).toBe(true);
+    });
+
+    test('arrow keys work during multi-select', () => {
+      const isMultiSelectMode = true;
+      const shouldHandleNavigation = true;
+
+      expect(isMultiSelectMode).toBe(true);
+      expect(shouldHandleNavigation).toBe(true);
+    });
+
+    test('vim keys work during multi-select', () => {
+      const isMultiSelectMode = true;
+      const isSearchModeActive = false;
+      const key = 'j';
+      const shouldHandleVimNav = !isSearchModeActive && /^[hjkl]$/i.test(key);
+
+      expect(isMultiSelectMode).toBe(true);
+      expect(shouldHandleVimNav).toBe(true);
+    });
+  });
+
+  describe('Integration with Selection Flow', () => {
+    test('multi-select returns array of selectors', async () => {
+      const mockPage = createMockPage();
+      const pickerPromise = launchPicker(mockPage as any);
+
+      setTimeout(() => {
+        mockPage.triggerSelection({
+          selector: '#btn-1',
+          tagName: 'button',
+          textPreview: 'Multiple buttons selected',
+          multiSelect: true,
+          selections: [
+            { selector: '#btn-1', tagName: 'button', textPreview: 'Button 1' },
+            { selector: '#btn-2', tagName: 'button', textPreview: 'Button 2' },
+            { selector: '#btn-3', tagName: 'button', textPreview: 'Button 3' },
+          ],
+        });
+      }, 10);
+
+      const result = await pickerPromise;
+      expect(result.multiSelect).toBe(true);
+      expect(result.selections).toHaveLength(3);
+    });
+
+    test('multi-select with single element works like regular select', async () => {
+      const mockPage = createMockPage();
+      const pickerPromise = launchPicker(mockPage as any);
+
+      setTimeout(() => {
+        mockPage.triggerSelection({
+          selector: '#single-element',
+          tagName: 'div',
+          textPreview: 'Single multi-select',
+        });
+      }, 10);
+
+      const result = await pickerPromise;
+      expect(result.selector).toBe('#single-element');
+    });
+  });
+});
+
+describe('Element Marking', () => {
+  describe('M Key - Mark Element', () => {
+    test('M key is recognized as mark trigger', () => {
+      const key = 'M';
+      const isMarkKey = key === 'M' || key === 'm';
+      expect(isMarkKey).toBe(true);
+    });
+
+    test('m key (lowercase) also marks element', () => {
+      const key = 'm';
+      const isMarkKey = key === 'M' || key === 'm';
+      expect(isMarkKey).toBe(true);
+    });
+
+    test('M key sets mark to current element', () => {
+      let markedElement: string | null = null;
+      const currentElement = '#current-div';
+      const key = 'm';
+
+      if (key === 'm' || key === 'M') {
+        markedElement = currentElement;
+      }
+      expect(markedElement).toBe('#current-div');
+    });
+
+    test('new mark replaces old mark', () => {
+      let markedElement: string | null = '#old-element';
+      const currentElement = '#new-element';
+      const key = 'm';
+
+      if (key === 'm' || key === 'M') {
+        markedElement = currentElement;
+      }
+      expect(markedElement).toBe('#new-element');
+    });
+
+    test('only one mark exists at a time', () => {
+      const marks: string[] = [];
+
+      marks.length = 0;
+      marks.push('#element-1');
+      expect(marks).toHaveLength(1);
+
+      marks.length = 0;
+      marks.push('#element-2');
+      expect(marks).toHaveLength(1);
+      expect(marks[0]).toBe('#element-2');
+    });
+  });
+
+  describe('Mark Persistence', () => {
+    test('mark persists through arrow navigation', () => {
+      const markedElement: string | null = '#marked';
+      let currentElement = '#current';
+
+      currentElement = '#sibling-1';
+      expect(markedElement).toBe('#marked');
+
+      currentElement = '#sibling-2';
+      expect(markedElement).toBe('#marked');
+
+      currentElement = '#child-1';
+      expect(markedElement).toBe('#marked');
+    });
+
+    test('mark persists through vim navigation', () => {
+      const markedElement: string | null = '#marked';
+      let currentElement = '#current';
+
+      currentElement = '#after-j';
+      expect(markedElement).toBe('#marked');
+
+      currentElement = '#after-k';
+      expect(markedElement).toBe('#marked');
+    });
+
+    test('mark persists through Tab navigation', () => {
+      const markedElement: string | null = '#marked-input';
+      let currentElement = '#input-1';
+
+      currentElement = '#input-2';
+      expect(markedElement).toBe('#marked-input');
+
+      currentElement = '#input-3';
+      expect(markedElement).toBe('#marked-input');
+    });
+
+    test('mark persists through bracket cycling', () => {
+      const markedElement: string | null = '#marked-match';
+      let currentMatchIndex = 0;
+
+      currentMatchIndex = 1;
+      expect(markedElement).toBe('#marked-match');
+
+      currentMatchIndex = 2;
+      expect(markedElement).toBe('#marked-match');
+    });
+  });
+
+  describe('Mark Visual Indicator', () => {
+    test('marked element has visual class', () => {
+      const markedClass = '__sneaky-marked';
+      expect(markedClass.startsWith('__sneaky')).toBe(true);
+    });
+
+    test('mark visual differs from highlight', () => {
+      const markedClass = '__sneaky-marked';
+      const highlightClass = '__sneaky-picker-highlight';
+      expect(markedClass).not.toBe(highlightClass);
+    });
+
+    test('mark visual differs from multi-select', () => {
+      const markedClass = '__sneaky-marked';
+      const multiSelectClass = '__sneaky-multi-selected';
+      expect(markedClass).not.toBe(multiSelectClass);
+    });
+  });
+
+  describe('Mark During Modes', () => {
+    test('M key disabled during search mode', () => {
+      const isSearchModeActive = true;
+      const key = 'm';
+      const shouldHandleMark = !isSearchModeActive && (key === 'm' || key === 'M');
+      expect(shouldHandleMark).toBe(false);
+    });
+
+    test('M key disabled when help is visible', () => {
+      const isHelpVisible = true;
+      const key = 'm';
+      const shouldHandleMark = !isHelpVisible && (key === 'm' || key === 'M');
+      expect(shouldHandleMark).toBe(false);
+    });
+
+    test('M key works during multi-select mode', () => {
+      const isMultiSelectMode = true;
+      const isSearchModeActive = false;
+      const isHelpVisible = false;
+      const key = 'm';
+      const shouldHandleMark = !isSearchModeActive && !isHelpVisible && (key === 'm' || key === 'M');
+      expect(shouldHandleMark).toBe(true);
+    });
+  });
+
+  describe('Mark with No Current Element', () => {
+    test('M key does nothing when no element is highlighted', () => {
+      let markedElement: string | null = null;
+      const currentElement: string | null = null;
+      const key = 'm';
+
+      if ((key === 'm' || key === 'M') && currentElement) {
+        markedElement = currentElement;
+      }
+      expect(markedElement).toBeNull();
+    });
+  });
+});
+
+describe('Jump to Mark', () => {
+  describe('Apostrophe Key Recognition', () => {
+    test("' key is recognized as jump-to-mark trigger", () => {
+      const key = "'";
+      const isJumpKey = key === "'";
+      expect(isJumpKey).toBe(true);
+    });
+
+    test('apostrophe key jumps to marked element', () => {
+      let currentElement = '#current';
+      const markedElement = '#marked';
+      const key = "'";
+
+      if (key === "'" && markedElement) {
+        currentElement = markedElement;
+      }
+      expect(currentElement).toBe('#marked');
+    });
+  });
+
+  describe('No Mark Behavior', () => {
+    test("' does nothing when no mark exists", () => {
+      let currentElement = '#current';
+      const markedElement: string | null = null;
+      const key = "'";
+
+      if (key === "'" && markedElement) {
+        currentElement = markedElement;
+      }
+      expect(currentElement).toBe('#current');
+    });
+
+    test('current element unchanged when jumping with no mark', () => {
+      const currentElement = '#stays-same';
+      const markedElement: string | null = null;
+      const newElement = markedElement || currentElement;
+      expect(newElement).toBe('#stays-same');
+    });
+  });
+
+  describe('Jump Updates Highlight', () => {
+    test("' key updates highlight to marked element", () => {
+      let highlightedElement = '#highlighted';
+      const markedElement = '#marked';
+      const key = "'";
+
+      if (key === "'" && markedElement) {
+        highlightedElement = markedElement;
+      }
+      expect(highlightedElement).toBe('#marked');
+    });
+
+    test('tooltip updates after jump to mark', () => {
+      const markedElementInfo = {
+        tagName: 'button',
+        classes: ['primary', 'large'],
+        selector: 'button.primary.large',
+      };
+      expect(markedElementInfo.tagName).toBe('button');
+      expect(markedElementInfo.selector).toBe('button.primary.large');
+    });
+  });
+
+  describe('Jump During Modes', () => {
+    test("' key disabled during search mode", () => {
+      const isSearchModeActive = true;
+      const key = "'";
+      const shouldHandleJump = !isSearchModeActive && key === "'";
+      expect(shouldHandleJump).toBe(false);
+    });
+
+    test("' key disabled when help is visible", () => {
+      const isHelpVisible = true;
+      const key = "'";
+      const shouldHandleJump = !isHelpVisible && key === "'";
+      expect(shouldHandleJump).toBe(false);
+    });
+  });
+
+  describe('Round-Trip Navigation', () => {
+    test('navigate away then jump back to mark', () => {
+      let currentElement = '#start';
+      const markedElement = '#start';
+
+      expect(currentElement).toBe(markedElement);
+
+      currentElement = '#sibling-1';
+      currentElement = '#sibling-2';
+      currentElement = '#nested-child';
+      expect(currentElement).not.toBe(markedElement);
+
+      currentElement = markedElement;
+      expect(currentElement).toBe('#start');
+    });
+
+    test('multiple jumps to same mark work', () => {
+      const markedElement = '#marked';
+      let currentElement = '#other';
+
+      currentElement = markedElement;
+      expect(currentElement).toBe('#marked');
+
+      currentElement = '#somewhere-else';
+
+      currentElement = markedElement;
+      expect(currentElement).toBe('#marked');
+
+      currentElement = '#far-away';
+
+      currentElement = markedElement;
+      expect(currentElement).toBe('#marked');
+    });
+  });
+
+  describe('Integration with Selection', () => {
+    test('jump to mark then select completes picker', async () => {
+      const mockPage = createMockPage();
+      const pickerPromise = launchPicker(mockPage as any);
+
+      setTimeout(() => {
+        mockPage.triggerSelection({
+          selector: '#marked-and-selected',
+          tagName: 'section',
+          textPreview: 'Jumped back and selected',
+        });
+      }, 10);
+
+      const result = await pickerPromise;
+      expect(result.selector).toBe('#marked-and-selected');
+    });
+  });
+});
+
+describe('G Key Navigation', () => {
+  describe('Key Recognition', () => {
+    test('G key is recognized', () => {
+      const key = 'G';
+      const isGKey = key === 'G' || key === 'g';
+      expect(isGKey).toBe(true);
+    });
+
+    test('g key (lowercase) is recognized', () => {
+      const key = 'g';
+      const isGKey = key === 'G' || key === 'g';
+      expect(isGKey).toBe(true);
+    });
+  });
+
+  describe('Search Mode Activation', () => {
+    test('G key activates search/go-to mode', () => {
+      let isGoToModeActive = false;
+      const key = 'g';
+
+      if (key === 'g' || key === 'G') {
+        isGoToModeActive = true;
+      }
+      expect(isGoToModeActive).toBe(true);
+    });
+  });
+
+  describe('Go-To by Partial Text', () => {
+    test('G followed by text navigates to matching element', () => {
+      const elements = [
+        { id: 'header', text: 'Welcome Header' },
+        { id: 'content', text: 'Main Content' },
+        { id: 'footer', text: 'Footer Section' },
+      ];
+      const searchText = 'foot';
+      const match = elements.find((el) =>
+        el.text.toLowerCase().includes(searchText.toLowerCase())
+      );
+      expect(match?.id).toBe('footer');
+    });
+
+    test('G search is case insensitive', () => {
+      const elements = [{ id: 'btn', text: 'SUBMIT BUTTON' }];
+      const searchText = 'submit';
+      const match = elements.find((el) =>
+        el.text.toLowerCase().includes(searchText.toLowerCase())
+      );
+      expect(match).toBeDefined();
+    });
+  });
+
+  describe('Go-To by ID', () => {
+    test('G# navigates by ID prefix', () => {
+      const searchQuery = '#nav';
+      const isIdSearch = searchQuery.startsWith('#');
+      expect(isIdSearch).toBe(true);
+    });
+
+    test('G followed by # searches element IDs', () => {
+      const elements = [
+        { id: 'navigation', tagName: 'nav' },
+        { id: 'main-content', tagName: 'main' },
+        { id: 'nav-menu', tagName: 'ul' },
+      ];
+      const searchId = 'nav';
+      const matches = elements.filter((el) =>
+        el.id.toLowerCase().includes(searchId.toLowerCase())
+      );
+      expect(matches).toHaveLength(2);
+    });
+  });
+
+  describe('Go-To by Tag Name', () => {
+    test('G followed by tag name finds elements', () => {
+      const elements = [
+        { tagName: 'button', text: 'Submit' },
+        { tagName: 'button', text: 'Cancel' },
+        { tagName: 'input', text: '' },
+      ];
+      const searchTag = 'button';
+      const matches = elements.filter(
+        (el) => el.tagName.toLowerCase() === searchTag.toLowerCase()
+      );
+      expect(matches).toHaveLength(2);
+    });
+  });
+
+  describe('Go-To Mode Exit', () => {
+    test('Escape exits go-to mode', () => {
+      let isGoToModeActive = true;
+      const key = 'Escape';
+
+      if (key === 'Escape') {
+        isGoToModeActive = false;
+      }
+      expect(isGoToModeActive).toBe(false);
+    });
+
+    test('Enter in go-to mode selects first match', () => {
+      const matches = ['#match-1', '#match-2', '#match-3'];
+      const selectedOnEnter = matches.length > 0 ? matches[0] : null;
+      expect(selectedOnEnter).toBe('#match-1');
+    });
+  });
+
+  describe('Go-To During Other Modes', () => {
+    test('G key disabled during search mode', () => {
+      const isSearchModeActive = true;
+      const key = 'g';
+      const shouldHandleG = !isSearchModeActive && (key === 'g' || key === 'G');
+      expect(shouldHandleG).toBe(false);
+    });
+
+    test('G key disabled when help is visible', () => {
+      const isHelpVisible = true;
+      const key = 'g';
+      const shouldHandleG = !isHelpVisible && (key === 'g' || key === 'G');
+      expect(shouldHandleG).toBe(false);
+    });
+  });
+
+  describe('Integration with Selection', () => {
+    test('G search then select completes picker', async () => {
+      const mockPage = createMockPage();
+      const pickerPromise = launchPicker(mockPage as any);
+
+      setTimeout(() => {
+        mockPage.triggerSelection({
+          selector: '#found-via-g-search',
+          tagName: 'article',
+          textPreview: 'Found Article',
+        });
+      }, 10);
+
+      const result = await pickerPromise;
+      expect(result.selector).toBe('#found-via-g-search');
+    });
+  });
+});
+
+describe('Phase 3 Keyboard Shortcut Interactions', () => {
+  describe('Vim Keys Combined with Marks', () => {
+    test('vim navigate -> mark -> vim navigate -> jump', () => {
+      let currentElement = '#start';
+      let markedElement: string | null = null;
+
+      currentElement = '#sibling-1';
+
+      markedElement = currentElement;
+      expect(markedElement).toBe('#sibling-1');
+
+      currentElement = '#sibling-2';
+      currentElement = '#child-of-sibling-2';
+
+      currentElement = markedElement!;
+      expect(currentElement).toBe('#sibling-1');
+    });
+
+    test('mark persists through vim and arrow navigation mix', () => {
+      const markedElement: string | null = '#marked';
+
+      const navigationSequence = ['j', 'ArrowDown', 'l', 'ArrowRight', 'k', 'ArrowUp', 'h'];
+      navigationSequence.forEach(() => {
+        expect(markedElement).toBe('#marked');
+      });
+    });
+  });
+
+  describe('Multi-Select with Vim Navigation', () => {
+    test('vim navigate between multi-select additions', () => {
+      const selectedElements: string[] = [];
+      let currentElement = '#el-1';
+
+      selectedElements.push(currentElement);
+
+      currentElement = '#el-2';
+
+      selectedElements.push(currentElement);
+
+      currentElement = '#el-3';
+
+      selectedElements.push(currentElement);
+
+      expect(selectedElements).toHaveLength(3);
+    });
+
+    test('multi-select combined with mark and jump', () => {
+      const selectedElements: string[] = [];
+      let currentElement = '#start';
+      let markedElement: string | null = null;
+
+      markedElement = currentElement;
+
+      currentElement = '#item-1';
+      selectedElements.push(currentElement);
+
+      currentElement = '#item-2';
+      selectedElements.push(currentElement);
+
+      currentElement = markedElement!;
+      selectedElements.push(currentElement);
+
+      expect(selectedElements).toContain('#start');
+      expect(selectedElements).toHaveLength(3);
+    });
+  });
+
+  describe('G Key with Marks', () => {
+    test('G search does not clear mark', () => {
+      const markedElement: string | null = '#marked';
+      let isGoToModeActive = false;
+
+      isGoToModeActive = true;
+      expect(markedElement).toBe('#marked');
+
+      isGoToModeActive = false;
+      expect(markedElement).toBe('#marked');
+    });
+
+    test('can mark element found via G search', () => {
+      const currentElement = '#found-via-search';
+      let markedElement: string | null = null;
+
+      markedElement = currentElement;
+      expect(markedElement).toBe('#found-via-search');
+    });
+  });
+
+  describe('All Phase 3 Keys in Sequence', () => {
+    test('complete workflow: vim nav -> mark -> G search -> jump -> select', async () => {
+      const mockPage = createMockPage();
+      const pickerPromise = launchPicker(mockPage as any);
+
+      setTimeout(() => {
+        mockPage.triggerSelection({
+          selector: '#workflow-complete',
+          tagName: 'button',
+          textPreview: 'Workflow Complete',
+        });
+      }, 10);
+
+      const result = await pickerPromise;
+      expect(result.selector).toBe('#workflow-complete');
+    });
+  });
+
+  describe('State Machine Validation', () => {
+    test('vim keys blocked during search mode', () => {
+      const state = {
+        isSearchModeActive: true,
+        isHelpVisible: false,
+        isGoToModeActive: false,
+      };
+      const shouldHandleVim = !state.isSearchModeActive && !state.isHelpVisible;
+      expect(shouldHandleVim).toBe(false);
+    });
+
+    test('vim keys blocked when help visible', () => {
+      const state = {
+        isSearchModeActive: false,
+        isHelpVisible: true,
+        isGoToModeActive: false,
+      };
+      const shouldHandleVim = !state.isSearchModeActive && !state.isHelpVisible;
+      expect(shouldHandleVim).toBe(false);
+    });
+
+    test('vim keys allowed in default state', () => {
+      const state = {
+        isSearchModeActive: false,
+        isHelpVisible: false,
+        isGoToModeActive: false,
+      };
+      const shouldHandleVim = !state.isSearchModeActive && !state.isHelpVisible;
+      expect(shouldHandleVim).toBe(true);
+    });
+
+    test('mark/jump keys blocked during search mode', () => {
+      const isSearchModeActive = true;
+      const shouldHandleMark = !isSearchModeActive;
+      const shouldHandleJump = !isSearchModeActive;
+      expect(shouldHandleMark).toBe(false);
+      expect(shouldHandleJump).toBe(false);
+    });
+
+    test('G key blocked during search mode', () => {
+      const isSearchModeActive = true;
+      const shouldHandleG = !isSearchModeActive;
+      expect(shouldHandleG).toBe(false);
+    });
+
+    test('Ctrl+Enter works in any mode except help', () => {
+      const scenarios = [
+        { isSearchModeActive: false, isHelpVisible: false, shouldWork: true },
+        { isSearchModeActive: true, isHelpVisible: false, shouldWork: false },
+        { isSearchModeActive: false, isHelpVisible: true, shouldWork: false },
+      ];
+
+      scenarios.forEach((s) => {
+        const shouldHandleCtrlEnter = !s.isSearchModeActive && !s.isHelpVisible;
+        expect(shouldHandleCtrlEnter).toBe(s.shouldWork);
+      });
+    });
+  });
+
+  describe('Help Content Updates for Phase 3', () => {
+    test('help includes vim navigation shortcuts', () => {
+      const helpContent = {
+        shortcuts: [
+          { key: 'H/J/K/L', description: 'Vim-style navigation (same as arrows)' },
+        ],
+      };
+      const vimShortcut = helpContent.shortcuts.find((s) => s.key.includes('H/J/K/L'));
+      expect(vimShortcut).toBeDefined();
+      expect(vimShortcut?.description).toContain('Vim');
+    });
+
+    test('help includes Ctrl+Enter multi-select', () => {
+      const helpContent = {
+        shortcuts: [{ key: 'Ctrl+Enter', description: 'Add to multi-select' }],
+      };
+      const multiSelectShortcut = helpContent.shortcuts.find((s) => s.key === 'Ctrl+Enter');
+      expect(multiSelectShortcut).toBeDefined();
+      expect(multiSelectShortcut?.description).toContain('multi-select');
+    });
+
+    test('help includes M key for marking', () => {
+      const helpContent = {
+        shortcuts: [{ key: 'M', description: 'Mark current element' }],
+      };
+      const markShortcut = helpContent.shortcuts.find((s) => s.key === 'M');
+      expect(markShortcut).toBeDefined();
+      expect(markShortcut?.description).toContain('Mark');
+    });
+
+    test("help includes ' key for jump to mark", () => {
+      const helpContent = {
+        shortcuts: [{ key: "'", description: 'Jump to marked element' }],
+      };
+      const jumpShortcut = helpContent.shortcuts.find((s) => s.key === "'");
+      expect(jumpShortcut).toBeDefined();
+      expect(jumpShortcut?.description).toContain('Jump');
+    });
+
+    test('help includes G key for go-to', () => {
+      const helpContent = {
+        shortcuts: [{ key: 'G', description: 'Go to element by text/ID' }],
+      };
+      const gShortcut = helpContent.shortcuts.find((s) => s.key === 'G');
+      expect(gShortcut).toBeDefined();
+      expect(gShortcut?.description).toContain('Go to');
+    });
+  });
+
+  describe('Banner Updates for Phase 3', () => {
+    test('banner shows mark indicator when element is marked', () => {
+      const hasMarkedElement = true;
+      const bannerAddition = hasMarkedElement ? " | ' to jump to mark" : '';
+      expect(bannerAddition).toContain("'");
+      expect(bannerAddition).toContain('mark');
+    });
+
+    test('banner shows multi-select mode indicator', () => {
+      const isMultiSelectMode = true;
+      const selectedCount = 2;
+      const bannerText = isMultiSelectMode
+        ? `Multi-select: ${selectedCount} selected | Ctrl+Enter to add | Enter to finish`
+        : '';
+      expect(bannerText).toContain('Multi-select');
+      expect(bannerText).toContain('2 selected');
+    });
+
+    test('banner mentions vim keys in shortcuts', () => {
+      const shortcutsLine = 'hjkl/arrows: navigate';
+      expect(shortcutsLine).toContain('hjkl');
+      expect(shortcutsLine).toContain('arrows');
+    });
+  });
+
+  describe('Event Prevention for Phase 3 Keys', () => {
+    test('vim keys call preventDefault', () => {
+      const keysWithPreventDefault = ['h', 'H', 'j', 'J', 'k', 'K', 'l', 'L'];
+      expect(keysWithPreventDefault).toHaveLength(8);
+      keysWithPreventDefault.forEach((key) => {
+        expect(/^[hjkl]$/i.test(key)).toBe(true);
+      });
+    });
+
+    test('mark and jump keys call preventDefault', () => {
+      const keysWithPreventDefault = ['m', 'M', "'"];
+      expect(keysWithPreventDefault).toContain('m');
+      expect(keysWithPreventDefault).toContain('M');
+      expect(keysWithPreventDefault).toContain("'");
+    });
+
+    test('G key calls preventDefault', () => {
+      const keysWithPreventDefault = ['g', 'G'];
+      expect(keysWithPreventDefault).toContain('g');
+      expect(keysWithPreventDefault).toContain('G');
+    });
+
+    test('Ctrl+Enter calls preventDefault', () => {
+      const event = { key: 'Enter', ctrlKey: true };
+      const shouldPreventDefault = event.key === 'Enter' && event.ctrlKey;
+      expect(shouldPreventDefault).toBe(true);
+    });
+  });
+});

@@ -22,6 +22,10 @@ export interface PickerResult {
   tagName: string;
   /** Element's text preview */
   textPreview: string;
+  /** Whether this is part of a multi-select batch (Phase 3) */
+  multiSelect?: boolean;
+  /** All selected elements when multi-select completes (Phase 3) */
+  selections?: Array<{ selector: string; tagName: string; textPreview: string }>;
 }
 
 /**
@@ -93,7 +97,7 @@ export async function launchPicker(page: Page): Promise<PickerResult> {
     `;
     banner.innerHTML = `
       <strong>🎯 Element Picker Active</strong> — Hover to highlight, click or Enter to select.
-      <span style="opacity: 0.8; margin-left: 10px;">Press <strong>?</strong> for help | ESC cancel</span>
+      <span style="opacity: 0.8; margin-left: 10px;">Ctrl+Enter multi-select | <strong>?</strong> help | ESC cancel</span>
     `;
 
     document.body.appendChild(overlay);
@@ -159,29 +163,37 @@ export async function launchPicker(page: Page): Promise<PickerResult> {
         background: #1f2937;
         padding: 24px 32px;
         border-radius: 12px;
-        max-width: 500px;
+        max-width: 600px;
         font-family: system-ui, sans-serif;
         color: #f9fafb;
         box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
       ">
         <h2 style="margin: 0 0 16px 0; color: #60a5fa; font-size: 18px;">Keyboard Shortcuts</h2>
-        <div style="display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; font-size: 14px;">
+        <div style="display: grid; grid-template-columns: auto 1fr auto 1fr; gap: 8px 16px; font-size: 14px;">
           <kbd style="background: #374151; padding: 2px 8px; border-radius: 4px; font-family: ui-monospace, monospace;">Enter</kbd>
           <span>Select current element</span>
+          <kbd style="background: #374151; padding: 2px 8px; border-radius: 4px; font-family: ui-monospace, monospace;">Ctrl+Enter</kbd>
+          <span>Multi-select (add to batch)</span>
           <kbd style="background: #374151; padding: 2px 8px; border-radius: 4px; font-family: ui-monospace, monospace;">Escape</kbd>
           <span>Cancel selection</span>
+          <kbd style="background: #374151; padding: 2px 8px; border-radius: 4px; font-family: ui-monospace, monospace;">Tab</kbd>
+          <span>Cycle focusable elements</span>
           <kbd style="background: #374151; padding: 2px 8px; border-radius: 4px; font-family: ui-monospace, monospace;">↑ ↓</kbd>
           <span>Navigate siblings</span>
           <kbd style="background: #374151; padding: 2px 8px; border-radius: 4px; font-family: ui-monospace, monospace;">← →</kbd>
-          <span>Navigate parent / first child</span>
-          <kbd style="background: #374151; padding: 2px 8px; border-radius: 4px; font-family: ui-monospace, monospace;">Tab</kbd>
-          <span>Cycle focusable elements</span>
+          <span>Navigate parent / child</span>
+          <kbd style="background: #374151; padding: 2px 8px; border-radius: 4px; font-family: ui-monospace, monospace;">H J K L</kbd>
+          <span>Vim navigation (←↓↑→)</span>
           <kbd style="background: #374151; padding: 2px 8px; border-radius: 4px; font-family: ui-monospace, monospace;">[ ]</kbd>
           <span>Cycle matching elements</span>
           <kbd style="background: #374151; padding: 2px 8px; border-radius: 4px; font-family: ui-monospace, monospace;">1-9</kbd>
           <span>Select numbered match</span>
-          <kbd style="background: #374151; padding: 2px 8px; border-radius: 4px; font-family: ui-monospace, monospace;">/</kbd>
+          <kbd style="background: #374151; padding: 2px 8px; border-radius: 4px; font-family: ui-monospace, monospace;">/ or G</kbd>
           <span>Search by text content</span>
+          <kbd style="background: #374151; padding: 2px 8px; border-radius: 4px; font-family: ui-monospace, monospace;">M</kbd>
+          <span>Mark current element</span>
+          <kbd style="background: #374151; padding: 2px 8px; border-radius: 4px; font-family: ui-monospace, monospace;">'</kbd>
+          <span>Jump to marked element</span>
           <kbd style="background: #374151; padding: 2px 8px; border-radius: 4px; font-family: ui-monospace, monospace;">?</kbd>
           <span>Toggle this help</span>
         </div>
@@ -204,6 +216,12 @@ export async function launchPicker(page: Page): Promise<PickerResult> {
     let isSearchMode = false; // Whether search mode is active
     let isHelpVisible = false; // Whether help overlay is visible
     const matchIndicators: HTMLElement[] = []; // Number badges on matching elements
+
+    // Phase 3: State variables
+    let markedElement: Element | null = null; // Element marked with M key
+    let markIndicator: HTMLElement | null = null; // Visual indicator for marked element
+    const multiSelectBatch: Array<{ selector: string; tagName: string; textPreview: string }> = []; // Ctrl+Enter selections
+    const multiSelectIndicators: HTMLElement[] = []; // Visual indicators for multi-selected elements
 
     /**
      * Check if an ID/class is from the picker UI (should be ignored)
@@ -600,6 +618,211 @@ export async function launchPicker(page: Page): Promise<PickerResult> {
       }
     }
 
+    // ==================== Phase 3: Mark Element ====================
+
+    /**
+     * Update or create the mark indicator badge
+     */
+    function updateMarkIndicator() {
+      // Remove existing indicator
+      if (markIndicator) {
+        markIndicator.remove();
+        markIndicator = null;
+      }
+
+      if (!markedElement) return;
+
+      // Create new indicator at marked element position
+      const rect = markedElement.getBoundingClientRect();
+      markIndicator = document.createElement('div');
+      markIndicator.id = '__sneaky-mark-indicator';
+      markIndicator.style.cssText = `
+        position: fixed;
+        top: ${rect.top}px;
+        right: ${window.innerWidth - rect.right}px;
+        width: 20px;
+        height: 20px;
+        background: #f59e0b;
+        color: white;
+        font-family: ui-monospace, monospace;
+        font-size: 12px;
+        font-weight: bold;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 4px;
+        z-index: 999999;
+        pointer-events: none;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+      `;
+      markIndicator.textContent = 'M';
+      document.body.appendChild(markIndicator);
+    }
+
+    /**
+     * Mark the current element for later navigation
+     */
+    function markCurrentElement() {
+      if (!currentElement) return;
+      if ((currentElement as HTMLElement).id?.startsWith('__sneaky')) return;
+
+      markedElement = currentElement;
+      updateMarkIndicator();
+    }
+
+    /**
+     * Jump to the previously marked element
+     */
+    function jumpToMarkedElement() {
+      if (!markedElement) return;
+
+      // Verify element is still in DOM
+      if (!document.body.contains(markedElement)) {
+        markedElement = null;
+        updateMarkIndicator();
+        return;
+      }
+
+      highlightElement(markedElement);
+      updateMatchingElements();
+    }
+
+    // ==================== Phase 3: Multi-Select Mode ====================
+
+    /**
+     * Update visual indicators for multi-selected elements
+     */
+    function updateMultiSelectIndicators() {
+      // Clear existing indicators
+      multiSelectIndicators.forEach((indicator) => indicator.remove());
+      multiSelectIndicators.length = 0;
+
+      // Create indicators for each selected element
+      multiSelectBatch.forEach((selection, index) => {
+        try {
+          const el = document.querySelector(selection.selector);
+          if (!el) return;
+
+          const rect = el.getBoundingClientRect();
+          const indicator = document.createElement('div');
+          indicator.id = `__sneaky-multiselect-${index}`;
+          indicator.style.cssText = `
+            position: fixed;
+            top: ${rect.top - 4}px;
+            left: ${rect.left - 4}px;
+            width: ${rect.width + 8}px;
+            height: ${rect.height + 8}px;
+            border: 2px dashed #10b981;
+            background: rgba(16, 185, 129, 0.1);
+            z-index: 999998;
+            pointer-events: none;
+            border-radius: 4px;
+          `;
+          document.body.appendChild(indicator);
+          multiSelectIndicators.push(indicator);
+
+          // Add number badge
+          const badge = document.createElement('div');
+          badge.id = `__sneaky-multiselect-badge-${index}`;
+          badge.style.cssText = `
+            position: fixed;
+            top: ${rect.top - 12}px;
+            left: ${rect.left - 4}px;
+            width: 18px;
+            height: 18px;
+            background: #10b981;
+            color: white;
+            font-family: ui-monospace, monospace;
+            font-size: 11px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            z-index: 999999;
+            pointer-events: none;
+          `;
+          badge.textContent = String(index + 1);
+          document.body.appendChild(badge);
+          multiSelectIndicators.push(badge);
+        } catch {
+          // Invalid selector, skip
+        }
+      });
+
+      // Update banner to show multi-select count
+      if (multiSelectBatch.length > 0) {
+        banner.innerHTML = `
+          <strong>🎯 Multi-Select Mode</strong> — ${multiSelectBatch.length} element${multiSelectBatch.length !== 1 ? 's' : ''} selected.
+          <span style="opacity: 0.8; margin-left: 10px;">Ctrl+Enter add more | Enter finish | ESC cancel</span>
+        `;
+      } else {
+        banner.innerHTML = `
+          <strong>🎯 Element Picker Active</strong> — Hover to highlight, click or Enter to select.
+          <span style="opacity: 0.8; margin-left: 10px;">Ctrl+Enter multi-select | <strong>?</strong> help | ESC cancel</span>
+        `;
+      }
+    }
+
+    /**
+     * Add current element to multi-select batch
+     */
+    function addToMultiSelect() {
+      if (!currentElement) return;
+      if ((currentElement as HTMLElement).id?.startsWith('__sneaky')) return;
+
+      const selector = generateSelector(currentElement);
+      const tagName = currentElement.tagName.toLowerCase();
+      const textContent = currentElement.textContent || '';
+      const textPreview =
+        textContent.trim().slice(0, 50) + (textContent.length > 50 ? '...' : '');
+
+      // Check if already selected (by selector)
+      const alreadySelected = multiSelectBatch.some((s) => s.selector === selector);
+      if (alreadySelected) return;
+
+      multiSelectBatch.push({ selector, tagName, textPreview });
+      updateMultiSelectIndicators();
+    }
+
+    /**
+     * Complete multi-select and return all selections
+     */
+    function completeMultiSelect() {
+      if (multiSelectBatch.length === 0) {
+        // No multi-selections, just do normal select
+        selectCurrentElement();
+        return;
+      }
+
+      // If there's a current element not yet in batch, add it
+      if (currentElement && !(currentElement as HTMLElement).id?.startsWith('__sneaky')) {
+        const selector = generateSelector(currentElement);
+        const alreadySelected = multiSelectBatch.some((s) => s.selector === selector);
+        if (!alreadySelected) {
+          const tagName = currentElement.tagName.toLowerCase();
+          const textContent = currentElement.textContent || '';
+          const textPreview =
+            textContent.trim().slice(0, 50) + (textContent.length > 50 ? '...' : '');
+          multiSelectBatch.push({ selector, tagName, textPreview });
+        }
+      }
+
+      try {
+        // Return all selections
+        const firstSelection = multiSelectBatch[0]!;
+        (window as unknown as { __sneakySnatcherSelect: (r: unknown) => void }).__sneakySnatcherSelect({
+          selector: firstSelection.selector,
+          tagName: firstSelection.tagName,
+          textPreview: firstSelection.textPreview,
+          multiSelect: true,
+          selections: multiSelectBatch,
+        });
+      } finally {
+        cleanup();
+      }
+    }
+
     // ==================== Phase 2: Search Mode ====================
 
     let searchHighlightedElements: Element[] = [];
@@ -744,17 +967,42 @@ export async function launchPicker(page: Page): Promise<PickerResult> {
         return;
       }
 
-      // /: Enter search mode
-      if (e.key === '/') {
+      // / or G: Enter search mode (G is "go to" alias)
+      if (e.key === '/' || e.key === 'g' || e.key === 'G') {
         e.preventDefault();
         enterSearchMode();
         return;
       }
 
-      // Enter: Confirm current selection
+      // Ctrl+Enter: Add to multi-select batch
+      if (e.key === 'Enter' && e.ctrlKey) {
+        e.preventDefault();
+        addToMultiSelect();
+        return;
+      }
+
+      // Enter: Confirm selection (or complete multi-select if batch exists)
       if (e.key === 'Enter') {
         e.preventDefault();
-        selectCurrentElement();
+        if (multiSelectBatch.length > 0) {
+          completeMultiSelect();
+        } else {
+          selectCurrentElement();
+        }
+        return;
+      }
+
+      // M: Mark current element
+      if (e.key === 'm' || e.key === 'M') {
+        e.preventDefault();
+        markCurrentElement();
+        return;
+      }
+
+      // ' (apostrophe): Jump to marked element
+      if (e.key === "'") {
+        e.preventDefault();
+        jumpToMarkedElement();
         return;
       }
 
@@ -795,8 +1043,8 @@ export async function launchPicker(page: Page): Promise<PickerResult> {
         return;
       }
 
-      // Arrow Up: Previous sibling
-      if (e.key === 'ArrowUp') {
+      // Arrow Up or K (Vim): Previous sibling
+      if (e.key === 'ArrowUp' || e.key === 'k' || e.key === 'K') {
         e.preventDefault();
         const prev = currentElement.previousElementSibling;
         if (prev && !(prev as HTMLElement).id?.startsWith('__sneaky')) {
@@ -806,8 +1054,8 @@ export async function launchPicker(page: Page): Promise<PickerResult> {
         return;
       }
 
-      // Arrow Down: Next sibling
-      if (e.key === 'ArrowDown') {
+      // Arrow Down or J (Vim): Next sibling
+      if (e.key === 'ArrowDown' || e.key === 'j' || e.key === 'J') {
         e.preventDefault();
         const next = currentElement.nextElementSibling;
         if (next && !(next as HTMLElement).id?.startsWith('__sneaky')) {
@@ -817,8 +1065,8 @@ export async function launchPicker(page: Page): Promise<PickerResult> {
         return;
       }
 
-      // Arrow Left: Parent element
-      if (e.key === 'ArrowLeft') {
+      // Arrow Left or H (Vim): Parent element
+      if (e.key === 'ArrowLeft' || e.key === 'h' || e.key === 'H') {
         e.preventDefault();
         const parent = currentElement.parentElement;
         if (parent && parent !== document.body && !(parent as HTMLElement).id?.startsWith('__sneaky')) {
@@ -828,8 +1076,8 @@ export async function launchPicker(page: Page): Promise<PickerResult> {
         return;
       }
 
-      // Arrow Right: First child element
-      if (e.key === 'ArrowRight') {
+      // Arrow Right or L (Vim): First child element
+      if (e.key === 'ArrowRight' || e.key === 'l' || e.key === 'L') {
         e.preventDefault();
         const firstChild = currentElement.firstElementChild;
         if (firstChild && !(firstChild as HTMLElement).id?.startsWith('__sneaky')) {
@@ -888,6 +1136,14 @@ export async function launchPicker(page: Page): Promise<PickerResult> {
       searchOverlay.remove();
       helpOverlay.remove();
       clearMatchIndicators();
+
+      // Phase 3 UI elements
+      if (markIndicator) {
+        markIndicator.remove();
+        markIndicator = null;
+      }
+      multiSelectIndicators.forEach((indicator) => indicator.remove());
+      multiSelectIndicators.length = 0;
 
       // Exit search mode if active
       if (isSearchMode) {
