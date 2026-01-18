@@ -93,18 +93,117 @@ export async function launchPicker(page: Page): Promise<PickerResult> {
     `;
     banner.innerHTML = `
       <strong>🎯 Element Picker Active</strong> — Hover to highlight, click or Enter to select.
-      <span style="opacity: 0.8; margin-left: 10px;">↑↓ siblings | ←→ parent/child | Tab focusables | ESC cancel</span>
+      <span style="opacity: 0.8; margin-left: 10px;">Press <strong>?</strong> for help | ESC cancel</span>
     `;
 
     document.body.appendChild(overlay);
     document.body.appendChild(tooltip);
     document.body.appendChild(banner);
 
+    // Phase 2: Search input overlay
+    const searchOverlay = document.createElement('div');
+    searchOverlay.id = '__sneaky-picker-search';
+    searchOverlay.style.cssText = `
+      position: fixed;
+      top: 50px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #1f2937;
+      padding: 12px 16px;
+      border-radius: 8px;
+      z-index: 999999;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+      display: none;
+    `;
+    searchOverlay.innerHTML = `
+      <div style="color: #9ca3af; font-family: system-ui, sans-serif; font-size: 12px; margin-bottom: 8px;">
+        Search elements by text content (Enter to select, ESC to cancel)
+      </div>
+      <input type="text" id="__sneaky-search-input" style="
+        width: 300px;
+        padding: 8px 12px;
+        background: #374151;
+        border: 1px solid #4b5563;
+        border-radius: 4px;
+        color: #f9fafb;
+        font-family: ui-monospace, monospace;
+        font-size: 14px;
+        outline: none;
+      " placeholder="Type to filter..." />
+      <div id="__sneaky-search-count" style="
+        color: #9ca3af;
+        font-family: system-ui, sans-serif;
+        font-size: 11px;
+        margin-top: 6px;
+      "></div>
+    `;
+    document.body.appendChild(searchOverlay);
+
+    // Phase 2: Help overlay
+    const helpOverlay = document.createElement('div');
+    helpOverlay.id = '__sneaky-picker-help';
+    helpOverlay.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.8);
+      z-index: 999999;
+      display: none;
+      align-items: center;
+      justify-content: center;
+    `;
+    helpOverlay.innerHTML = `
+      <div style="
+        background: #1f2937;
+        padding: 24px 32px;
+        border-radius: 12px;
+        max-width: 500px;
+        font-family: system-ui, sans-serif;
+        color: #f9fafb;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+      ">
+        <h2 style="margin: 0 0 16px 0; color: #60a5fa; font-size: 18px;">Keyboard Shortcuts</h2>
+        <div style="display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; font-size: 14px;">
+          <kbd style="background: #374151; padding: 2px 8px; border-radius: 4px; font-family: ui-monospace, monospace;">Enter</kbd>
+          <span>Select current element</span>
+          <kbd style="background: #374151; padding: 2px 8px; border-radius: 4px; font-family: ui-monospace, monospace;">Escape</kbd>
+          <span>Cancel selection</span>
+          <kbd style="background: #374151; padding: 2px 8px; border-radius: 4px; font-family: ui-monospace, monospace;">↑ ↓</kbd>
+          <span>Navigate siblings</span>
+          <kbd style="background: #374151; padding: 2px 8px; border-radius: 4px; font-family: ui-monospace, monospace;">← →</kbd>
+          <span>Navigate parent / first child</span>
+          <kbd style="background: #374151; padding: 2px 8px; border-radius: 4px; font-family: ui-monospace, monospace;">Tab</kbd>
+          <span>Cycle focusable elements</span>
+          <kbd style="background: #374151; padding: 2px 8px; border-radius: 4px; font-family: ui-monospace, monospace;">[ ]</kbd>
+          <span>Cycle matching elements</span>
+          <kbd style="background: #374151; padding: 2px 8px; border-radius: 4px; font-family: ui-monospace, monospace;">1-9</kbd>
+          <span>Select numbered match</span>
+          <kbd style="background: #374151; padding: 2px 8px; border-radius: 4px; font-family: ui-monospace, monospace;">/</kbd>
+          <span>Search by text content</span>
+          <kbd style="background: #374151; padding: 2px 8px; border-radius: 4px; font-family: ui-monospace, monospace;">?</kbd>
+          <span>Toggle this help</span>
+        </div>
+        <div style="margin-top: 16px; text-align: center; color: #9ca3af; font-size: 12px;">
+          Press <kbd style="background: #374151; padding: 2px 6px; border-radius: 3px; font-family: ui-monospace, monospace;">?</kbd> or <kbd style="background: #374151; padding: 2px 6px; border-radius: 3px; font-family: ui-monospace, monospace;">Escape</kbd> to close
+        </div>
+      </div>
+    `;
+    document.body.appendChild(helpOverlay);
+
     let currentElement: Element | null = null;
     let mouseMoveTimeout: ReturnType<typeof setTimeout> | null = null;
     const MOUSEMOVE_DEBOUNCE_MS = 16; // ~60fps debounce for selector generation
     const MAX_SELECTOR_PATH_DEPTH = 5; // Maximum ancestor levels to traverse for path selector
     const MAX_CLASS_NAME_LENGTH = 30; // Skip overly long class names (likely generated/hashed)
+
+    // Phase 2: State variables
+    let matchingElements: Element[] = []; // Elements matching current selector pattern
+    let currentMatchIndex = 0; // Current index in matchingElements for bracket navigation
+    let isSearchMode = false; // Whether search mode is active
+    let isHelpVisible = false; // Whether help overlay is visible
+    const matchIndicators: HTMLElement[] = []; // Number badges on matching elements
 
     /**
      * Check if an ID/class is from the picker UI (should be ignored)
@@ -308,6 +407,8 @@ export async function launchPicker(page: Page): Promise<PickerResult> {
               <div style="color: #60a5fa; font-weight: bold;">&lt;${tagName}${classPreview}&gt;</div>
               <div style="margin-top: 4px; opacity: 0.8; font-size: 11px; word-break: break-all;">${selector}</div>
             `;
+            // Phase 2: Update matching elements and show indicators
+            updateMatchingElements();
           }
         }, MOUSEMOVE_DEBOUNCE_MS);
       }
@@ -429,18 +530,224 @@ export async function launchPicker(page: Page): Promise<PickerResult> {
       }
     }
 
+    // ==================== Phase 2: Match Indicators ====================
+
+    /**
+     * Clear all match indicator badges from the page
+     */
+    function clearMatchIndicators() {
+      matchIndicators.forEach((indicator) => indicator.remove());
+      matchIndicators.length = 0;
+    }
+
+    /**
+     * Update matching elements based on current selector pattern and show numbered badges
+     */
+    function updateMatchingElements() {
+      clearMatchIndicators();
+
+      if (!currentElement) {
+        matchingElements = [];
+        return;
+      }
+
+      // Get the current selector for the element
+      const selector = generateSelector(currentElement);
+
+      // Find all matching elements
+      try {
+        const matches = Array.from(document.querySelectorAll(selector)).filter(
+          (el) => !(el as HTMLElement).id?.startsWith('__sneaky')
+        );
+
+        matchingElements = matches;
+        currentMatchIndex = matches.indexOf(currentElement);
+        if (currentMatchIndex === -1) currentMatchIndex = 0;
+
+        // Only show indicators if there are 2+ matches (and max 9)
+        if (matches.length >= 2 && matches.length <= 9) {
+          matches.forEach((el, index) => {
+            const rect = el.getBoundingClientRect();
+            const indicator = document.createElement('div');
+            indicator.id = `__sneaky-match-${index}`;
+            indicator.style.cssText = `
+              position: fixed;
+              top: ${rect.top}px;
+              left: ${rect.left}px;
+              width: 20px;
+              height: 20px;
+              background: ${el === currentElement ? '#3b82f6' : '#6b7280'};
+              color: white;
+              font-family: ui-monospace, monospace;
+              font-size: 12px;
+              font-weight: bold;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              border-radius: 4px;
+              z-index: 999999;
+              pointer-events: none;
+              box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+            `;
+            indicator.textContent = String(index + 1);
+            document.body.appendChild(indicator);
+            matchIndicators.push(indicator);
+          });
+        }
+      } catch {
+        // Invalid selector, reset matches
+        matchingElements = [];
+      }
+    }
+
+    // ==================== Phase 2: Search Mode ====================
+
+    let searchHighlightedElements: Element[] = [];
+
+    /**
+     * Enter search mode - show search input and handle filtering
+     */
+    function enterSearchMode() {
+      isSearchMode = true;
+      searchOverlay.style.display = 'block';
+      const searchInput = document.getElementById('__sneaky-search-input') as HTMLInputElement;
+      const searchCount = document.getElementById('__sneaky-search-count')!;
+      searchInput.value = '';
+      searchCount.textContent = '';
+      searchHighlightedElements = [];
+      searchInput.focus();
+
+      // Handle input changes
+      searchInput.oninput = () => {
+        const query = searchInput.value.trim().toLowerCase();
+        clearSearchHighlights();
+
+        if (!query) {
+          searchCount.textContent = '';
+          searchHighlightedElements = [];
+          return;
+        }
+
+        // Find elements containing the search text
+        const allElements = document.querySelectorAll('*');
+        searchHighlightedElements = Array.from(allElements).filter((el) => {
+          if ((el as HTMLElement).id?.startsWith('__sneaky')) return false;
+          // Only check direct text content, not nested children
+          const directText = Array.from(el.childNodes)
+            .filter((node) => node.nodeType === Node.TEXT_NODE)
+            .map((node) => node.textContent || '')
+            .join('')
+            .trim()
+            .toLowerCase();
+          return directText.includes(query);
+        });
+
+        searchCount.textContent = `${searchHighlightedElements.length} match${searchHighlightedElements.length !== 1 ? 'es' : ''} found`;
+
+        // Highlight first match
+        if (searchHighlightedElements.length > 0) {
+          highlightElement(searchHighlightedElements[0]!);
+        }
+      };
+
+      // Handle Enter key in search input
+      searchInput.onkeydown = (e: KeyboardEvent) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          e.stopPropagation();
+          if (searchHighlightedElements.length > 0) {
+            exitSearchMode();
+            selectCurrentElement();
+          }
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          e.stopPropagation();
+          exitSearchMode();
+        }
+      };
+    }
+
+    /**
+     * Clear visual highlights from search results
+     */
+    function clearSearchHighlights() {
+      // No persistent highlights to clear - we just use the main overlay
+    }
+
+    /**
+     * Exit search mode
+     */
+    function exitSearchMode() {
+      isSearchMode = false;
+      searchOverlay.style.display = 'none';
+      clearSearchHighlights();
+      searchHighlightedElements = [];
+      const searchInput = document.getElementById('__sneaky-search-input') as HTMLInputElement;
+      if (searchInput) {
+        searchInput.oninput = null;
+        searchInput.onkeydown = null;
+      }
+    }
+
+    // ==================== Phase 2: Help Overlay ====================
+
+    /**
+     * Toggle help overlay visibility
+     */
+    function toggleHelp() {
+      isHelpVisible = !isHelpVisible;
+      helpOverlay.style.display = isHelpVisible ? 'flex' : 'none';
+    }
+
+    /**
+     * Close help overlay
+     */
+    function closeHelp() {
+      isHelpVisible = false;
+      helpOverlay.style.display = 'none';
+    }
+
     /**
      * Handle keyboard navigation and selection
      */
     function handleKeyDown(e: KeyboardEvent) {
-      // Escape: Cancel selection
+      // If search mode is active, let the search input handle keys
+      if (isSearchMode) {
+        return;
+      }
+
+      // Escape: Close help, or cancel selection
       if (e.key === 'Escape') {
+        if (isHelpVisible) {
+          e.preventDefault();
+          closeHelp();
+          return;
+        }
         cleanup();
         (window as unknown as { __sneakySnatcherSelect: (r: unknown) => void }).__sneakySnatcherSelect({
           selector: '',
           tagName: '',
           textPreview: '',
         });
+        return;
+      }
+
+      // ?: Toggle help overlay
+      if (e.key === '?') {
+        e.preventDefault();
+        toggleHelp();
+        return;
+      }
+
+      // Don't process other keys if help is visible
+      if (isHelpVisible) {
+        return;
+      }
+
+      // /: Enter search mode
+      if (e.key === '/') {
+        e.preventDefault();
+        enterSearchMode();
         return;
       }
 
@@ -451,8 +758,42 @@ export async function launchPicker(page: Page): Promise<PickerResult> {
         return;
       }
 
+      // Number keys 1-9: Select numbered match
+      if (e.key >= '1' && e.key <= '9') {
+        const matchIndex = parseInt(e.key, 10) - 1;
+        if (matchIndex < matchingElements.length) {
+          e.preventDefault();
+          currentMatchIndex = matchIndex;
+          highlightElement(matchingElements[matchIndex]!);
+          updateMatchingElements();
+        }
+        return;
+      }
+
       // Arrow and Tab navigation require a current element
       if (!currentElement) return;
+
+      // [: Previous matching element
+      if (e.key === '[') {
+        e.preventDefault();
+        if (matchingElements.length > 1) {
+          currentMatchIndex = currentMatchIndex <= 0 ? matchingElements.length - 1 : currentMatchIndex - 1;
+          highlightElement(matchingElements[currentMatchIndex]!);
+          updateMatchingElements();
+        }
+        return;
+      }
+
+      // ]: Next matching element
+      if (e.key === ']') {
+        e.preventDefault();
+        if (matchingElements.length > 1) {
+          currentMatchIndex = currentMatchIndex >= matchingElements.length - 1 ? 0 : currentMatchIndex + 1;
+          highlightElement(matchingElements[currentMatchIndex]!);
+          updateMatchingElements();
+        }
+        return;
+      }
 
       // Arrow Up: Previous sibling
       if (e.key === 'ArrowUp') {
@@ -460,6 +801,7 @@ export async function launchPicker(page: Page): Promise<PickerResult> {
         const prev = currentElement.previousElementSibling;
         if (prev && !(prev as HTMLElement).id?.startsWith('__sneaky')) {
           highlightElement(prev);
+          updateMatchingElements();
         }
         return;
       }
@@ -470,6 +812,7 @@ export async function launchPicker(page: Page): Promise<PickerResult> {
         const next = currentElement.nextElementSibling;
         if (next && !(next as HTMLElement).id?.startsWith('__sneaky')) {
           highlightElement(next);
+          updateMatchingElements();
         }
         return;
       }
@@ -480,6 +823,7 @@ export async function launchPicker(page: Page): Promise<PickerResult> {
         const parent = currentElement.parentElement;
         if (parent && parent !== document.body && !(parent as HTMLElement).id?.startsWith('__sneaky')) {
           highlightElement(parent);
+          updateMatchingElements();
         }
         return;
       }
@@ -490,6 +834,7 @@ export async function launchPicker(page: Page): Promise<PickerResult> {
         const firstChild = currentElement.firstElementChild;
         if (firstChild && !(firstChild as HTMLElement).id?.startsWith('__sneaky')) {
           highlightElement(firstChild);
+          updateMatchingElements();
         }
         return;
       }
@@ -512,6 +857,7 @@ export async function launchPicker(page: Page): Promise<PickerResult> {
         }
 
         highlightElement(focusable[nextIndex]!);
+        updateMatchingElements();
         return;
       }
     }
@@ -532,9 +878,22 @@ export async function launchPicker(page: Page): Promise<PickerResult> {
         clearTimeout(mouseMoveTimeout);
         mouseMoveTimeout = null;
       }
+
+      // Phase 1 UI elements
       overlay.remove();
       tooltip.remove();
       banner.remove();
+
+      // Phase 2 UI elements
+      searchOverlay.remove();
+      helpOverlay.remove();
+      clearMatchIndicators();
+
+      // Exit search mode if active
+      if (isSearchMode) {
+        exitSearchMode();
+      }
+
       document.removeEventListener('mousemove', handleMouseMove, true);
       document.removeEventListener('click', handleClick, true);
       document.removeEventListener('keydown', handleKeyDown, true);

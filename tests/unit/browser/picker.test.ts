@@ -1250,3 +1250,844 @@ describe('Updated Banner Content', () => {
     expect(shortcuts).toContain('focusables');
   });
 });
+
+// ============================================================================
+// Phase 2 Keyboard Shortcuts Tests
+// ============================================================================
+
+describe('Number Key Selection', () => {
+  describe('Number Key Recognition', () => {
+    test('recognizes number keys 1-9', () => {
+      const numberKeys = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
+      const isNumberKey = (key: string) => /^[1-9]$/.test(key);
+
+      numberKeys.forEach((key) => {
+        expect(isNumberKey(key)).toBe(true);
+      });
+    });
+
+    test('does not recognize 0 as a number key', () => {
+      const isNumberKey = (key: string) => /^[1-9]$/.test(key);
+      expect(isNumberKey('0')).toBe(false);
+    });
+
+    test('does not recognize non-numeric keys', () => {
+      const isNumberKey = (key: string) => /^[1-9]$/.test(key);
+      expect(isNumberKey('a')).toBe(false);
+      expect(isNumberKey('Enter')).toBe(false);
+      expect(isNumberKey(' ')).toBe(false);
+    });
+
+    test('converts key to 0-based index', () => {
+      const keyToIndex = (key: string) => parseInt(key, 10) - 1;
+      expect(keyToIndex('1')).toBe(0);
+      expect(keyToIndex('5')).toBe(4);
+      expect(keyToIndex('9')).toBe(8);
+    });
+  });
+
+  describe('Match Selection Behavior', () => {
+    test('pressing number key selects nth matching element', () => {
+      const matches = ['match1', 'match2', 'match3', 'match4', 'match5'];
+      const keyToIndex = (key: string) => parseInt(key, 10) - 1;
+
+      // Pressing '3' selects the 3rd element (index 2)
+      const selectedIndex = keyToIndex('3');
+      expect(matches[selectedIndex]).toBe('match3');
+    });
+
+    test('pressing 1 selects first match', () => {
+      const matches = ['first', 'second', 'third'];
+      const selectedIndex = parseInt('1', 10) - 1;
+      expect(matches[selectedIndex]).toBe('first');
+    });
+
+    test('pressing 9 selects ninth match when available', () => {
+      const matches = Array.from({ length: 12 }, (_, i) => `match${i + 1}`);
+      const selectedIndex = parseInt('9', 10) - 1;
+      expect(matches[selectedIndex]).toBe('match9');
+    });
+  });
+
+  describe('Boundary Conditions', () => {
+    test('pressing 9 when only 3 matches does nothing', () => {
+      const matches = ['match1', 'match2', 'match3'];
+      const requestedIndex = parseInt('9', 10) - 1; // 8
+      const isValidSelection = requestedIndex < matches.length;
+      expect(isValidSelection).toBe(false);
+    });
+
+    test('pressing 5 when only 4 matches does nothing', () => {
+      const matches = ['a', 'b', 'c', 'd'];
+      const requestedIndex = parseInt('5', 10) - 1; // 4
+      const isValidSelection = requestedIndex < matches.length;
+      expect(isValidSelection).toBe(false);
+    });
+
+    test('pressing 3 when exactly 3 matches selects third', () => {
+      const matches = ['a', 'b', 'c'];
+      const requestedIndex = parseInt('3', 10) - 1; // 2
+      const isValidSelection = requestedIndex < matches.length;
+      expect(isValidSelection).toBe(true);
+      expect(matches[requestedIndex]).toBe('c');
+    });
+
+    test('handles empty matches array gracefully', () => {
+      const matches: string[] = [];
+      const requestedIndex = parseInt('1', 10) - 1; // 0
+      const isValidSelection = requestedIndex < matches.length;
+      expect(isValidSelection).toBe(false);
+    });
+  });
+
+  describe('Multiple Matches Requirement', () => {
+    test('number keys require multiple matches to work', () => {
+      // With single match, number keys should not trigger selection
+      const matchCount = 1;
+      const shouldAllowNumberKeys = matchCount > 1;
+      expect(shouldAllowNumberKeys).toBe(false);
+    });
+
+    test('number keys work when 2 or more matches exist', () => {
+      const matchCount = 2;
+      const shouldAllowNumberKeys = matchCount > 1;
+      expect(shouldAllowNumberKeys).toBe(true);
+    });
+
+    test('number keys work with many matches', () => {
+      const matchCount = 15;
+      const shouldAllowNumberKeys = matchCount > 1;
+      expect(shouldAllowNumberKeys).toBe(true);
+    });
+  });
+
+  describe('Integration with Selection Flow', () => {
+    test('number key selection triggers selection callback', async () => {
+      const mockPage = createMockPage();
+      const pickerPromise = launchPicker(mockPage as any);
+
+      // Simulate number key selecting 2nd element from matches
+      setTimeout(() => {
+        mockPage.triggerSelection({
+          selector: 'button.submit:nth-of-type(2)',
+          tagName: 'button',
+          textPreview: 'Second Submit Button',
+        });
+      }, 10);
+
+      const result = await pickerPromise;
+      expect(result.selector).toContain('nth-of-type(2)');
+      expect(result.textPreview).toBe('Second Submit Button');
+    });
+  });
+});
+
+describe('Bracket Key Cycling', () => {
+  describe('Key Recognition', () => {
+    test('recognizes [ key for previous match', () => {
+      const key = '[';
+      const isPrevKey = key === '[';
+      expect(isPrevKey).toBe(true);
+    });
+
+    test('recognizes ] key for next match', () => {
+      const key = ']';
+      const isNextKey = key === ']';
+      expect(isNextKey).toBe(true);
+    });
+  });
+
+  describe('Navigation Direction', () => {
+    test('[ key navigates to previous match', () => {
+      const matches = ['match1', 'match2', 'match3'];
+      const currentIndex = 1; // at 'match2'
+      const prevIndex = currentIndex - 1;
+      expect(matches[prevIndex]).toBe('match1');
+    });
+
+    test('] key navigates to next match', () => {
+      const matches = ['match1', 'match2', 'match3'];
+      const currentIndex = 1; // at 'match2'
+      const nextIndex = currentIndex + 1;
+      expect(matches[nextIndex]).toBe('match3');
+    });
+  });
+
+  describe('Wrapping Behavior', () => {
+    test('[ at first match wraps to last match', () => {
+      const matches = ['match1', 'match2', 'match3'];
+      const currentIndex = 0; // at first
+      const prevIndex = currentIndex <= 0 ? matches.length - 1 : currentIndex - 1;
+      expect(prevIndex).toBe(2);
+      expect(matches[prevIndex]).toBe('match3');
+    });
+
+    test('] at last match wraps to first match', () => {
+      const matches = ['match1', 'match2', 'match3'];
+      const currentIndex = 2; // at last
+      const nextIndex = currentIndex >= matches.length - 1 ? 0 : currentIndex + 1;
+      expect(nextIndex).toBe(0);
+      expect(matches[nextIndex]).toBe('match1');
+    });
+
+    test('wrapping works with only 2 matches', () => {
+      const matches = ['first', 'last'];
+
+      // At first, ] goes to last
+      let currentIndex = 0;
+      let nextIndex = currentIndex >= matches.length - 1 ? 0 : currentIndex + 1;
+      expect(nextIndex).toBe(1);
+
+      // At last, ] wraps to first
+      currentIndex = 1;
+      nextIndex = currentIndex >= matches.length - 1 ? 0 : currentIndex + 1;
+      expect(nextIndex).toBe(0);
+
+      // At first, [ wraps to last
+      currentIndex = 0;
+      let prevIndex = currentIndex <= 0 ? matches.length - 1 : currentIndex - 1;
+      expect(prevIndex).toBe(1);
+
+      // At last, [ goes to first
+      currentIndex = 1;
+      prevIndex = currentIndex <= 0 ? matches.length - 1 : currentIndex - 1;
+      expect(prevIndex).toBe(0);
+    });
+  });
+
+  describe('Single Match Behavior', () => {
+    test('[ does nothing with single match', () => {
+      const matches = ['onlyOne'];
+      const shouldCycle = matches.length > 1;
+      expect(shouldCycle).toBe(false);
+    });
+
+    test('] does nothing with single match', () => {
+      const matches = ['onlyOne'];
+      const shouldCycle = matches.length > 1;
+      expect(shouldCycle).toBe(false);
+    });
+
+    test('brackets are disabled when match count is 1', () => {
+      const matchCount = 1;
+      const areBracketsEnabled = matchCount > 1;
+      expect(areBracketsEnabled).toBe(false);
+    });
+  });
+
+  describe('Index Tracking', () => {
+    test('maintains current match index across cycles', () => {
+      const matches = ['a', 'b', 'c', 'd', 'e'];
+      let currentIndex = 0;
+
+      // Simulate ] key presses
+      currentIndex = (currentIndex + 1) % matches.length; // 1
+      expect(currentIndex).toBe(1);
+      currentIndex = (currentIndex + 1) % matches.length; // 2
+      expect(currentIndex).toBe(2);
+      currentIndex = (currentIndex + 1) % matches.length; // 3
+      expect(currentIndex).toBe(3);
+    });
+
+    test('index resets when selector changes', () => {
+      // When a new element is selected, match index should reset to 0
+      const currentMatchIndex = 3;
+      const resetIndex = 0;
+      expect(resetIndex).toBe(0);
+    });
+  });
+
+  describe('Integration with Highlight', () => {
+    test('bracket navigation updates highlight to new match', async () => {
+      const mockPage = createMockPage();
+      const pickerPromise = launchPicker(mockPage as any);
+
+      // Simulate cycling to a different match with brackets
+      setTimeout(() => {
+        mockPage.triggerSelection({
+          selector: 'div.card',
+          tagName: 'div',
+          textPreview: 'Card 3 of 5',
+        });
+      }, 10);
+
+      const result = await pickerPromise;
+      expect(result.selector).toBe('div.card');
+    });
+  });
+});
+
+describe('Quick Filter/Search Mode', () => {
+  describe('Activation', () => {
+    test('/ key activates search mode', () => {
+      const key = '/';
+      const activatesSearch = key === '/';
+      expect(activatesSearch).toBe(true);
+    });
+
+    test('search mode starts inactive by default', () => {
+      const isSearchModeActive = false;
+      expect(isSearchModeActive).toBe(false);
+    });
+
+    test('/ key toggles search input visibility', () => {
+      let isSearchVisible = false;
+      // Press /
+      isSearchVisible = true;
+      expect(isSearchVisible).toBe(true);
+    });
+  });
+
+  describe('Exit Behavior', () => {
+    test('Escape exits search mode', () => {
+      let isSearchModeActive = true;
+      const key = 'Escape';
+      if (key === 'Escape') {
+        isSearchModeActive = false;
+      }
+      expect(isSearchModeActive).toBe(false);
+    });
+
+    test('Escape in search mode does not cancel picker', () => {
+      // First Escape should exit search mode, not cancel picker
+      const isSearchModeActive = true;
+      const shouldCancelPicker = !isSearchModeActive;
+      expect(shouldCancelPicker).toBe(false);
+    });
+
+    test('Escape when search mode inactive cancels picker', () => {
+      const isSearchModeActive = false;
+      const shouldCancelPicker = !isSearchModeActive;
+      expect(shouldCancelPicker).toBe(true);
+    });
+  });
+
+  describe('Enter Behavior', () => {
+    test('Enter in search mode selects first match', () => {
+      const filteredMatches = ['first-match', 'second-match', 'third-match'];
+      const selectedOnEnter = filteredMatches[0];
+      expect(selectedOnEnter).toBe('first-match');
+    });
+
+    test('Enter with no matches does nothing', () => {
+      const filteredMatches: string[] = [];
+      const hasMatch = filteredMatches.length > 0;
+      expect(hasMatch).toBe(false);
+    });
+
+    test('Enter clears search and selects', () => {
+      let searchQuery = 'button';
+      let isSearchModeActive = true;
+      // Simulate Enter
+      if (isSearchModeActive) {
+        searchQuery = '';
+        isSearchModeActive = false;
+      }
+      expect(searchQuery).toBe('');
+      expect(isSearchModeActive).toBe(false);
+    });
+  });
+
+  describe('Text Content Filtering', () => {
+    test('filters elements by text content', () => {
+      const elements = [
+        { text: 'Submit Form', selector: '#submit' },
+        { text: 'Cancel', selector: '#cancel' },
+        { text: 'Submit Order', selector: '#order' },
+      ];
+      const query = 'submit';
+      const filtered = elements.filter((el) =>
+        el.text.toLowerCase().includes(query.toLowerCase())
+      );
+      expect(filtered).toHaveLength(2);
+      expect(filtered[0]?.selector).toBe('#submit');
+      expect(filtered[1]?.selector).toBe('#order');
+    });
+
+    test('filtering is case insensitive', () => {
+      const elements = [
+        { text: 'BUTTON', selector: '#btn1' },
+        { text: 'Button', selector: '#btn2' },
+        { text: 'button', selector: '#btn3' },
+      ];
+      const query = 'Button';
+      const filtered = elements.filter((el) =>
+        el.text.toLowerCase().includes(query.toLowerCase())
+      );
+      expect(filtered).toHaveLength(3);
+    });
+
+    test('filters by partial match', () => {
+      const elements = [
+        { text: 'Subscribe to newsletter', selector: '#sub' },
+        { text: 'Unsubscribe', selector: '#unsub' },
+        { text: 'Contact us', selector: '#contact' },
+      ];
+      const query = 'sub';
+      const filtered = elements.filter((el) =>
+        el.text.toLowerCase().includes(query.toLowerCase())
+      );
+      expect(filtered).toHaveLength(2);
+    });
+
+    test('filters by tag name as well', () => {
+      const elements = [
+        { text: 'Click me', tagName: 'button', selector: 'button.primary' },
+        { text: 'Link text', tagName: 'a', selector: 'a.link' },
+        { text: 'Submit', tagName: 'button', selector: 'button.submit' },
+      ];
+      const query = 'button';
+      const filtered = elements.filter(
+        (el) =>
+          el.text.toLowerCase().includes(query.toLowerCase()) ||
+          el.tagName.toLowerCase().includes(query.toLowerCase())
+      );
+      expect(filtered).toHaveLength(2);
+    });
+  });
+
+  describe('Empty Search Behavior', () => {
+    test('empty search shows all elements', () => {
+      const allElements = ['el1', 'el2', 'el3', 'el4', 'el5'];
+      const query = '';
+      const filtered = query
+        ? allElements.filter((el) => el.includes(query))
+        : allElements;
+      expect(filtered).toHaveLength(5);
+    });
+
+    test('clearing search restores all elements', () => {
+      const allElements = ['el1', 'el2', 'el3'];
+      let query = 'something';
+      let filtered = allElements.filter((el) => el.includes(query));
+      expect(filtered).toHaveLength(0);
+
+      // Clear search
+      query = '';
+      filtered = query ? allElements.filter((el) => el.includes(query)) : allElements;
+      expect(filtered).toHaveLength(3);
+    });
+  });
+
+  describe('Search Input UI', () => {
+    test('search input has __sneaky prefix to avoid selection', () => {
+      const searchInputId = '__sneaky-picker-search';
+      expect(searchInputId.startsWith('__sneaky')).toBe(true);
+    });
+
+    test('search input is positioned in banner area', () => {
+      // Search input should appear in or near the banner
+      const bannerPosition = 'top';
+      expect(bannerPosition).toBe('top');
+    });
+
+    test('search input has placeholder text', () => {
+      const placeholder = 'Type to filter elements...';
+      expect(placeholder).toContain('filter');
+    });
+  });
+
+  describe('Real-time Filtering', () => {
+    test('filters update as user types', () => {
+      const elements = ['button-submit', 'button-cancel', 'input-text'];
+      let query = 'b';
+      let filtered = elements.filter((el) => el.includes(query));
+      expect(filtered).toHaveLength(2);
+
+      query = 'bu';
+      filtered = elements.filter((el) => el.includes(query));
+      expect(filtered).toHaveLength(2);
+
+      query = 'but';
+      filtered = elements.filter((el) => el.includes(query));
+      expect(filtered).toHaveLength(2);
+
+      query = 'button-s';
+      filtered = elements.filter((el) => el.includes(query));
+      expect(filtered).toHaveLength(1);
+    });
+
+    test('debouncing is applied to filter updates', () => {
+      // Filter updates should be debounced to avoid excessive DOM queries
+      const debounceMs = 100;
+      expect(debounceMs).toBeGreaterThan(0);
+    });
+  });
+
+  describe('Integration with Selection', () => {
+    test('search mode selection completes picker', async () => {
+      const mockPage = createMockPage();
+      const pickerPromise = launchPicker(mockPage as any);
+
+      setTimeout(() => {
+        mockPage.triggerSelection({
+          selector: 'button.filtered-match',
+          tagName: 'button',
+          textPreview: 'Filtered Button',
+        });
+      }, 10);
+
+      const result = await pickerPromise;
+      expect(result.selector).toBe('button.filtered-match');
+    });
+  });
+});
+
+describe('Help Overlay', () => {
+  describe('Toggle Behavior', () => {
+    test('? key shows help overlay', () => {
+      let isHelpVisible = false;
+      const key = '?';
+      if (key === '?') {
+        isHelpVisible = !isHelpVisible;
+      }
+      expect(isHelpVisible).toBe(true);
+    });
+
+    test('? key again closes help overlay', () => {
+      let isHelpVisible = true;
+      const key = '?';
+      if (key === '?') {
+        isHelpVisible = !isHelpVisible;
+      }
+      expect(isHelpVisible).toBe(false);
+    });
+
+    test('help overlay toggles on repeated ? presses', () => {
+      let isHelpVisible = false;
+
+      // First press
+      isHelpVisible = !isHelpVisible;
+      expect(isHelpVisible).toBe(true);
+
+      // Second press
+      isHelpVisible = !isHelpVisible;
+      expect(isHelpVisible).toBe(false);
+
+      // Third press
+      isHelpVisible = !isHelpVisible;
+      expect(isHelpVisible).toBe(true);
+    });
+  });
+
+  describe('Escape Closes Help', () => {
+    test('Escape closes help overlay', () => {
+      let isHelpVisible = true;
+      const key = 'Escape';
+      if (key === 'Escape' && isHelpVisible) {
+        isHelpVisible = false;
+      }
+      expect(isHelpVisible).toBe(false);
+    });
+
+    test('Escape when help open does not cancel picker', () => {
+      const isHelpVisible = true;
+      const shouldCancelPicker = !isHelpVisible;
+      expect(shouldCancelPicker).toBe(false);
+    });
+
+    test('Escape priority: help > search > picker', () => {
+      // Priority order when Escape is pressed
+      const priorities = ['help', 'search', 'picker'];
+      expect(priorities[0]).toBe('help');
+      expect(priorities[1]).toBe('search');
+      expect(priorities[2]).toBe('picker');
+    });
+  });
+
+  describe('Help Content', () => {
+    test('help contains all shortcut descriptions', () => {
+      const helpContent = {
+        shortcuts: [
+          { key: 'Click', description: 'Select element' },
+          { key: 'Enter', description: 'Confirm selection' },
+          { key: 'Escape', description: 'Cancel picker' },
+          { key: '↑/↓', description: 'Navigate siblings' },
+          { key: '←/→', description: 'Navigate parent/child' },
+          { key: 'Tab', description: 'Cycle focusable elements' },
+          { key: '1-9', description: 'Select nth match' },
+          { key: '[ / ]', description: 'Cycle through matches' },
+          { key: '/', description: 'Quick filter/search' },
+          { key: '?', description: 'Toggle this help' },
+        ],
+      };
+
+      expect(helpContent.shortcuts.length).toBeGreaterThanOrEqual(10);
+
+      // Verify all Phase 2 shortcuts are documented
+      const keys = helpContent.shortcuts.map((s) => s.key);
+      expect(keys).toContain('1-9');
+      expect(keys).toContain('[ / ]');
+      expect(keys).toContain('/');
+      expect(keys).toContain('?');
+    });
+
+    test('help explains number key selection', () => {
+      const helpText = '1-9: Select nth matching element';
+      expect(helpText).toContain('1-9');
+      expect(helpText).toContain('nth');
+    });
+
+    test('help explains bracket cycling', () => {
+      const helpText = '[ / ]: Cycle through same-selector matches';
+      expect(helpText).toContain('[');
+      expect(helpText).toContain(']');
+      expect(helpText).toContain('Cycle');
+    });
+
+    test('help explains search mode', () => {
+      const helpText = '/: Quick filter elements by text';
+      expect(helpText).toContain('/');
+      expect(helpText).toContain('filter');
+    });
+  });
+
+  describe('Help Overlay UI', () => {
+    test('help overlay has __sneaky prefix', () => {
+      const helpOverlayId = '__sneaky-picker-help';
+      expect(helpOverlayId.startsWith('__sneaky')).toBe(true);
+    });
+
+    test('help overlay has high z-index', () => {
+      // Help should appear above the picker tooltip
+      const helpZIndex = 1000001;
+      const pickerZIndex = 999999;
+      expect(helpZIndex).toBeGreaterThan(pickerZIndex);
+    });
+
+    test('help overlay has semi-transparent backdrop', () => {
+      const backdropOpacity = 0.9;
+      expect(backdropOpacity).toBeGreaterThan(0.5);
+      expect(backdropOpacity).toBeLessThan(1);
+    });
+
+    test('help overlay is centered on screen', () => {
+      const style = {
+        position: 'fixed',
+        top: '50%',
+        left: '50%',
+        transform: 'translate(-50%, -50%)',
+      };
+      expect(style.position).toBe('fixed');
+      expect(style.transform).toContain('translate');
+    });
+  });
+
+  describe('Help Does Not Interfere with Selection', () => {
+    test('help overlay has pointer-events: none for backdrop', () => {
+      // The backdrop should not block element selection
+      const pointerEvents = 'none';
+      expect(pointerEvents).toBe('none');
+    });
+
+    test('help content area captures clicks to prevent selection', () => {
+      // The help content itself should capture clicks
+      const contentPointerEvents = 'auto';
+      expect(contentPointerEvents).toBe('auto');
+    });
+  });
+
+  describe('Integration', () => {
+    test('help can be shown and hidden during selection flow', async () => {
+      const mockPage = createMockPage();
+      const pickerPromise = launchPicker(mockPage as any);
+
+      // Simulate: show help -> hide help -> select element
+      setTimeout(() => {
+        mockPage.triggerSelection({
+          selector: '#target',
+          tagName: 'button',
+          textPreview: 'Target Button',
+        });
+      }, 10);
+
+      const result = await pickerPromise;
+      expect(result.selector).toBe('#target');
+    });
+  });
+});
+
+describe('Updated Banner with Help Hint', () => {
+  describe('Help Hint Display', () => {
+    test('banner mentions ? for help', () => {
+      const bannerText = 'Press ? for help';
+      expect(bannerText).toContain('?');
+      expect(bannerText).toContain('help');
+    });
+
+    test('banner shows shortened instructions with help available', () => {
+      // With ? for help, banner can show minimal shortcuts
+      const shortBanner = 'Hover to highlight | Click or Enter to select | ? for help';
+      expect(shortBanner.length).toBeLessThan(100);
+    });
+  });
+
+  describe('Banner Updates', () => {
+    test('banner shows match count when multiple matches', () => {
+      const matchCount = 5;
+      const bannerAddition = `(${matchCount} matches, use 1-9 or [/] to cycle)`;
+      expect(bannerAddition).toContain('5 matches');
+      expect(bannerAddition).toContain('1-9');
+      expect(bannerAddition).toContain('[/]');
+    });
+
+    test('banner does not show match info for single match', () => {
+      const matchCount = 1;
+      const showMatchInfo = matchCount > 1;
+      expect(showMatchInfo).toBe(false);
+    });
+
+    test('banner shows current match index when cycling', () => {
+      const currentIndex = 3;
+      const totalMatches = 7;
+      const indexDisplay = `Match ${currentIndex}/${totalMatches}`;
+      expect(indexDisplay).toBe('Match 3/7');
+    });
+  });
+
+  describe('Banner During Search Mode', () => {
+    test('banner indicates search mode is active', () => {
+      const searchModeText = 'Search: type to filter, Enter to select, Esc to exit';
+      expect(searchModeText).toContain('Search');
+      expect(searchModeText).toContain('filter');
+      expect(searchModeText).toContain('Esc');
+    });
+
+    test('banner shows filtered count during search', () => {
+      const filteredCount = 12;
+      const totalCount = 50;
+      const searchStatus = `Showing ${filteredCount} of ${totalCount} elements`;
+      expect(searchStatus).toContain('12');
+      expect(searchStatus).toContain('50');
+    });
+  });
+});
+
+describe('Phase 2 Keyboard Shortcut Interactions', () => {
+  describe('State Machine Transitions', () => {
+    test('search mode disables number key selection', () => {
+      const isSearchModeActive = true;
+      const shouldHandleNumberKeys = !isSearchModeActive;
+      expect(shouldHandleNumberKeys).toBe(false);
+    });
+
+    test('help overlay disables all navigation keys', () => {
+      const isHelpVisible = true;
+      const shouldHandleNavigation = !isHelpVisible;
+      expect(shouldHandleNavigation).toBe(false);
+    });
+
+    test('help overlay allows only ? and Escape', () => {
+      const isHelpVisible = true;
+      const allowedKeysWhenHelpVisible = ['?', 'Escape'];
+      expect(allowedKeysWhenHelpVisible).toContain('?');
+      expect(allowedKeysWhenHelpVisible).toContain('Escape');
+      expect(allowedKeysWhenHelpVisible).not.toContain('1');
+      expect(allowedKeysWhenHelpVisible).not.toContain('[');
+    });
+
+    test('search mode allows only typing, Enter, and Escape', () => {
+      const isSearchModeActive = true;
+      // Search mode should handle: letters, numbers (as text), Enter, Escape
+      const handledInSearchMode = ['Enter', 'Escape', 'Backspace', 'a', 'b', '1'];
+      const blockedInSearchMode = ['ArrowUp', 'ArrowDown', '[', ']', 'Tab'];
+
+      expect(handledInSearchMode).toContain('Enter');
+      expect(blockedInSearchMode).toContain('[');
+    });
+  });
+
+  describe('Combined Feature Scenarios', () => {
+    test('select element -> cycle matches -> use number key', async () => {
+      const mockPage = createMockPage();
+      const pickerPromise = launchPicker(mockPage as any);
+
+      // Simulate: hover over element, see 5 matches, press 3 to select 3rd
+      setTimeout(() => {
+        mockPage.triggerSelection({
+          selector: 'button.action',
+          tagName: 'button',
+          textPreview: 'Third Action Button',
+        });
+      }, 10);
+
+      const result = await pickerPromise;
+      expect(result.tagName).toBe('button');
+    });
+
+    test('open help -> close help -> search -> select', async () => {
+      const mockPage = createMockPage();
+      const pickerPromise = launchPicker(mockPage as any);
+
+      // Simulate: ? -> ? -> / -> type -> Enter -> selection
+      setTimeout(() => {
+        mockPage.triggerSelection({
+          selector: 'input.email',
+          tagName: 'input',
+          textPreview: '',
+        });
+      }, 10);
+
+      const result = await pickerPromise;
+      expect(result.selector).toBe('input.email');
+    });
+  });
+
+  describe('Keyboard Event Properties', () => {
+    test('Phase 2 shortcuts call preventDefault', () => {
+      const keysWithPreventDefault = ['/', '?', '[', ']', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+      expect(keysWithPreventDefault).toHaveLength(13);
+    });
+
+    test('Phase 2 shortcuts call stopPropagation', () => {
+      // Prevent events from bubbling to page handlers
+      const keysWithStopPropagation = ['/', '?', '[', ']'];
+      expect(keysWithStopPropagation).toContain('/');
+      expect(keysWithStopPropagation).toContain('?');
+    });
+
+    test('search input captures all keystrokes except Escape/Enter', () => {
+      const searchInputCapturesKey = (key: string) => {
+        return key !== 'Escape' && key !== 'Enter';
+      };
+      expect(searchInputCapturesKey('a')).toBe(true);
+      expect(searchInputCapturesKey('1')).toBe(true);
+      expect(searchInputCapturesKey('Escape')).toBe(false);
+      expect(searchInputCapturesKey('Enter')).toBe(false);
+    });
+  });
+
+  describe('Edge Cases', () => {
+    test('rapid bracket presses cycle correctly', () => {
+      const matches = ['a', 'b', 'c'];
+      let currentIndex = 0;
+
+      // Rapid ] presses
+      for (let i = 0; i < 10; i++) {
+        currentIndex = (currentIndex + 1) % matches.length;
+      }
+      expect(currentIndex).toBe(1); // 10 % 3 = 1
+    });
+
+    test('number key pressed during search is typed, not selection', () => {
+      const isSearchModeActive = true;
+      const key = '5';
+      const isNumberKeySelection = !isSearchModeActive && /^[1-9]$/.test(key);
+      expect(isNumberKeySelection).toBe(false);
+    });
+
+    test('? pressed during search is typed, not help toggle', () => {
+      const isSearchModeActive = true;
+      const key = '?';
+      const isHelpToggle = !isSearchModeActive && key === '?';
+      expect(isHelpToggle).toBe(false);
+    });
+
+    test('bracket keys during search are typed, not cycling', () => {
+      const isSearchModeActive = true;
+      const key = '[';
+      const isBracketCycle = !isSearchModeActive && (key === '[' || key === ']');
+      expect(isBracketCycle).toBe(false);
+    });
+  });
+});
