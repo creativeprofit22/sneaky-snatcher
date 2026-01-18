@@ -5,7 +5,7 @@
  */
 
 import type { LLMConfig, TokenUsage } from '../types/index.ts';
-import { askClaude, checkClaude } from 'subclaude';
+import { askClaude, checkClaude } from './subclaude.ts';
 import { LLMError, LLMNotAvailableError, LLMTimeoutError } from '../errors/index.ts';
 
 // Type declarations for subclaude (untyped library)

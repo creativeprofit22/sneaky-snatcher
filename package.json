@@ -42,8 +42,7 @@
     "chalk": "^5.3.0",
     "commander": "^12.1.0",
     "ora": "^8.0.1",
-    "playwright": "^1.48.0",
-    "subclaude": "^1.0.0"
+    "playwright": "^1.48.0"
   },
   "devDependencies": {
     "@types/bun": "latest",
