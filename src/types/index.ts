@@ -318,3 +318,43 @@ export interface BatchResult {
   /** Total time in ms */
   totalTime: number;
 }
+
+// ============================================================================
+// Config File
+// ============================================================================
+
+/** Config file (.snatchrc) structure */
+export interface FileConfig {
+  /** Output framework */
+  framework?: Framework;
+  /** Styling approach */
+  styling?: Styling;
+  /** Output directory */
+  outputDir?: string;
+  /** Run in headless mode */
+  headless?: boolean;
+  /** Include assets by default */
+  includeAssets?: boolean;
+  /** Verbose logging */
+  verbose?: boolean;
+  /** LLM configuration */
+  llm?: {
+    model?: 'sonnet' | 'opus' | 'haiku';
+    timeout?: number;
+  };
+  /** Browser configuration */
+  browser?: {
+    viewport?: { width?: number; height?: number };
+    timeout?: number;
+  };
+}
+
+/** Config validation error */
+export interface ConfigValidationError {
+  /** Property path (e.g., "llm.model") */
+  path: string;
+  /** Error message */
+  message: string;
+  /** Received value */
+  received?: unknown;
+}

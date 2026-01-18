@@ -9,6 +9,7 @@ import type { SnatchOptions } from '../types/index.ts';
 import { validateOptions, parseOptions, loadBatchConfig } from './options.ts';
 import { logError, logInfo, logWarn, logSuccess } from './logger.ts';
 import { orchestrate, orchestrateBatch } from '../orchestrator.ts';
+import { loadConfig } from '../config/loader.ts';
 
 const version = '0.1.0';
 
@@ -90,19 +91,27 @@ export function createProgram(): Command {
  * Run the snatch command
  */
 async function runSnatch(url: string, rawOptions: Record<string, unknown>): Promise<void> {
+  // Parse CLI options first
   const parsed = parseOptions({ ...rawOptions, url });
 
+  // Load config file and merge with CLI options (CLI takes precedence)
+  const baseConfig = await loadConfig(parsed);
+
+  // Build final options: CLI explicit values override config file values
   const options: SnatchOptions = {
     url: parsed.url || url,
     selector: parsed.selector,
     find: parsed.find,
-    framework: parsed.framework || 'react',
-    styling: parsed.styling || 'tailwind',
-    outputDir: parsed.outputDir || './components',
+    // Use CLI value if explicitly provided, otherwise use merged config
+    framework: parsed.framework || baseConfig.framework,
+    styling: parsed.styling || baseConfig.styling,
+    // For outputDir, check if CLI provided a non-default value
+    outputDir: parsed.outputDir && parsed.outputDir !== './components' ? parsed.outputDir : baseConfig.outputDir,
     componentName: parsed.componentName,
-    interactive: parsed.interactive || false,
-    includeAssets: parsed.includeAssets || false,
-    verbose: parsed.verbose || false,
+    // interactive is the inverse of headless in config
+    interactive: parsed.interactive || !baseConfig.headless,
+    includeAssets: parsed.includeAssets || baseConfig.includeAssets,
+    verbose: parsed.verbose || baseConfig.verbose,
   };
 
   // Validate options
