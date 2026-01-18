@@ -170,4 +170,188 @@ export class OutputWriter {
   setConfig(config: Partial<OutputConfig>): void {
     this.config = { ...this.config, ...config };
   }
+
+  /**
+   * Remove a component and its directory
+   * @returns Object with success status, removed files, and any error message
+   */
+  async removeComponent(name: string): Promise<{
+    success: boolean;
+    files: string[];
+    error?: string;
+  }> {
+    try {
+      validateComponentName(name);
+    } catch (err) {
+      return {
+        success: false,
+        files: [],
+        error: err instanceof Error ? err.message : 'Invalid component name',
+      };
+    }
+
+    const componentDir = path.join(this.config.baseDir, name);
+
+    // Check if component directory exists
+    try {
+      const stat = await fs.stat(componentDir);
+      if (!stat.isDirectory()) {
+        return {
+          success: false,
+          files: [],
+          error: `'${name}' exists but is not a directory`,
+        };
+      }
+    } catch {
+      return {
+        success: false,
+        files: [],
+        error: `Component '${name}' not found in ${this.config.baseDir}`,
+      };
+    }
+
+    // List files before deletion
+    const files = await this.listComponentFiles(componentDir);
+
+    // Remove the component directory
+    await fs.rm(componentDir, { recursive: true, force: true });
+
+    // Update parent index to remove the export
+    await this.removeFromParentIndex(name);
+
+    return {
+      success: true,
+      files,
+    };
+  }
+
+  /**
+   * List files in a component directory (relative paths)
+   */
+  private async listComponentFiles(dir: string): Promise<string[]> {
+    const files: string[] = [];
+
+    async function walk(currentDir: string, relativePath: string = ''): Promise<void> {
+      const entries = await fs.readdir(currentDir, { withFileTypes: true });
+      for (const entry of entries) {
+        const entryRelative = relativePath ? `${relativePath}/${entry.name}` : entry.name;
+        if (entry.isDirectory()) {
+          await walk(path.join(currentDir, entry.name), entryRelative);
+        } else {
+          files.push(entryRelative);
+        }
+      }
+    }
+
+    await walk(dir);
+    return files;
+  }
+
+  /**
+   * Remove component export from parent index.ts
+   */
+  private async removeFromParentIndex(name: string): Promise<void> {
+    const indexPath = path.join(this.config.baseDir, 'index.ts');
+
+    let content: string;
+    try {
+      content = await fs.readFile(indexPath, 'utf-8');
+    } catch {
+      // No parent index exists, nothing to update
+      return;
+    }
+
+    const exportLine = `export * from './${name}/index.js';`;
+    const lines = content.split('\n');
+    const filteredLines = lines.filter((line) => line.trim() !== exportLine);
+
+    // Check if anything changed
+    if (filteredLines.length === lines.length) {
+      // Export line wasn't found, nothing to update
+      return;
+    }
+
+    const newContent = filteredLines.join('\n').trim();
+
+    if (newContent === '') {
+      // Index is now empty, remove it
+      await fs.rm(indexPath, { force: true });
+    } else {
+      await fs.writeFile(indexPath, newContent + '\n', 'utf-8');
+    }
+  }
+
+  /**
+   * List all components in the base directory
+   * Returns component info: name, file count, total size in bytes
+   */
+  async listComponents(): Promise<ComponentInfo[]> {
+    const components: ComponentInfo[] = [];
+
+    // Check if directory exists
+    try {
+      await fs.access(this.config.baseDir);
+    } catch {
+      // Directory doesn't exist, return empty array
+      return components;
+    }
+
+    // Read all entries in the base directory
+    const entries = await fs.readdir(this.config.baseDir, { withFileTypes: true });
+
+    // Process each subdirectory (each is a component)
+    for (const entry of entries) {
+      if (!entry.isDirectory()) {
+        continue;
+      }
+
+      const componentDir = path.join(this.config.baseDir, entry.name);
+      const info = await this.getComponentInfo(entry.name, componentDir);
+      if (info) {
+        components.push(info);
+      }
+    }
+
+    // Sort alphabetically by name
+    components.sort((a, b) => a.name.localeCompare(b.name));
+
+    return components;
+  }
+
+  /**
+   * Get info for a single component directory
+   */
+  private async getComponentInfo(name: string, dirPath: string): Promise<ComponentInfo | null> {
+    try {
+      const files = await fs.readdir(dirPath);
+      let totalSize = 0;
+      let fileCount = 0;
+
+      for (const file of files) {
+        const filePath = path.join(dirPath, file);
+        const stat = await fs.stat(filePath);
+        if (stat.isFile()) {
+          fileCount++;
+          totalSize += stat.size;
+        }
+      }
+
+      return {
+        name,
+        fileCount,
+        totalSize,
+      };
+    } catch {
+      return null;
+    }
+  }
+}
+
+/**
+ * Component info returned by listComponents
+ */
+export interface ComponentInfo {
+  name: string;
+  fileCount: number;
+  totalSize: number;
 }

@@ -58,6 +58,8 @@ interface StageContext {
   sharedBrowser?: boolean;
   /** If true, LLM client is shared (for symmetry with browser pattern) */
   sharedLLM?: boolean;
+  /** If true, output writer is shared (for symmetry with browser/LLM pattern) */
+  sharedOutput?: boolean;
 }
 
 interface BrowseResult {
@@ -70,12 +72,14 @@ interface LocateStageResult {
   snapshot?: PageSnapshot;
 }
 
-/** Internal options for orchestrate with browser/LLM sharing support */
+/** Internal options for orchestrate with browser/LLM/output sharing support */
 interface OrchestrateInternalOptions {
   /** Shared browser manager - if provided, will be reused and not closed */
   sharedBrowser?: BrowserManager;
   /** Shared LLM client - if provided, will be reused */
   sharedLLM?: LLMClient;
+  /** Shared output writer - if provided, will be reused */
+  sharedOutput?: OutputWriter;
 }
 
 // ============================================================================
@@ -392,20 +396,29 @@ export async function orchestrate(
   // Set verbose mode
   setVerbose(options.verbose ?? false);
 
-  // Use shared browser/LLM if provided, otherwise create new
+  // Use shared browser/LLM/output if provided, otherwise create new
   const isBrowserShared = !!internalOpts.sharedBrowser;
   const isLLMShared = !!internalOpts.sharedLLM;
+  const isOutputShared = !!internalOpts.sharedOutput;
   const browser = internalOpts.sharedBrowser ?? new BrowserManager({ headless: !options.interactive });
 
   // Initialize context - use shared resources if provided, otherwise create new
+  // Note: when using shared output, we update its config to use this component's outputDir
+  // IMPORTANT: Batch processing is sequential - setConfig() is safe because components are processed one at a time
+  const output = internalOpts.sharedOutput ?? new OutputWriter({ baseDir: options.outputDir });
+  if (internalOpts.sharedOutput) {
+    output.setConfig({ baseDir: options.outputDir });
+  }
+
   const ctx: StageContext = {
     options,
     browser,
     llm: internalOpts.sharedLLM ?? new LLMClient(),
-    output: new OutputWriter({ baseDir: options.outputDir }),
+    output,
     timing,
     sharedBrowser: isBrowserShared,
     sharedLLM: isLLMShared,
+    sharedOutput: isOutputShared,
   };
 
   try {
@@ -502,9 +515,10 @@ export async function orchestrateBatch(
 
   logVerbose(`Starting batch extraction of ${config.components.length} components`);
 
-  // Create shared browser and LLM client for all components
+  // Create shared browser, LLM client, and output writer for all components
   const sharedBrowser = new BrowserManager({ headless: true });
   const sharedLLM = new LLMClient();
+  const sharedOutput = new OutputWriter();
 
   // Launch browser - handle failure gracefully
   try {
@@ -549,7 +563,7 @@ export async function orchestrateBatch(
       };
 
       try {
-        const result = await orchestrate(snatchOptions, { sharedBrowser, sharedLLM });
+        const result = await orchestrate(snatchOptions, { sharedBrowser, sharedLLM, sharedOutput });
 
         if (result.success) {
           results.push({

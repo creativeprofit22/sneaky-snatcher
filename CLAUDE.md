@@ -63,23 +63,16 @@ Fix ALL errors/warnings before continuing.
 5. **Write** → Output files + download assets
 
 ## Pipeline State
-Phase: refactor-hunt
-Feature: LLM Client Reuse
-Files-Validated: src/orchestrator.ts
-Validation-Report: reports/validation-llm-client-reuse.md
+Phase: build
+Feature: CLI List and Clean Commands
+Files-To-Modify: src/cli/program.ts, src/output/writer.ts (for clean logic)
 
-## Last Session (2026-01-17)
-**Feature**: LLM Client Reuse - Validated
+## Last Session (2026-01-18)
+**Feature**: CLI List and Clean Commands - Build Phase
 
-### Changes Made
-- Added `sharedLLM?: LLMClient` to OrchestrateInternalOptions
-- Added `sharedLLM?: boolean` to StageContext for pattern symmetry
-- Modified `orchestrate()` to use shared LLM if provided
-- Modified `orchestrateBatch()` to create one LLMClient and share across components
+### Pending Features
+1. `snatch list` - Scan directory and display extracted components with metadata
+2. `snatch clean <name>` - Remove a component and its files, update parent index
 
-### Bugs Fixed During Validation
-1. [MEDIUM] Added sharedLLM tracking flag for symmetry with browser pattern
-
-### Test Status
-- 517 tests pass
-- No new tests needed (LLMClient is stateless, covered by existing integration tests)
+### Previous Feature
+- OutputWriter Reuse - Validated (see reports/validation-outputwriter-reuse.md)
